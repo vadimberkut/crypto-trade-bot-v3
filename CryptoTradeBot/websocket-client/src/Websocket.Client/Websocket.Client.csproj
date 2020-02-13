@@ -1,0 +1,33 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>netstandard2.0</TargetFramework>
+    <PackageId>Websocket.Client</PackageId>
+    <Version>4.1.0</Version>
+    <Authors>Mariusz Kotas</Authors>
+    <Description>Client for websocket API with built-in reconnection and error handling</Description>
+    <PackageRequireLicenseAcceptance>false</PackageRequireLicenseAcceptance>
+    <PackageReleaseNotes>Release of version 4.0</PackageReleaseNotes>
+    <Copyright>Copyright 2020 Mariusz Kotas. All rights reserved.</Copyright>
+    <PackageTags>websockets websocket client</PackageTags>
+    <PackageLicenseUrl>https://github.com/Marfusios/websocket-client/blob/master/LICENSE</PackageLicenseUrl>
+    <PackageProjectUrl>https://github.com/Marfusios/websocket-client</PackageProjectUrl>
+    <PackageIconUrl>http://www.techbysample.com/wp-content/uploads/2017/03/websocket-1.png</PackageIconUrl>
+    <RepositoryUrl>https://github.com/Marfusios/websocket-client</RepositoryUrl>
+    <RepositoryType>Git</RepositoryType>
+    <GeneratePackageOnBuild>true</GeneratePackageOnBuild>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile> 
+    <AssemblyVersion>4.1.0.0</AssemblyVersion>
+    <FileVersion>4.1.0.0</FileVersion>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="LibLog" Version="5.0.8">
+      <PrivateAssets>all</PrivateAssets>
+      <IncludeAssets>runtime; build; native; contentfiles; analyzers</IncludeAssets>
+    </PackageReference>
+    <PackageReference Include="System.Reactive" Version="4.0.0" />
+    <PackageReference Include="System.Threading.Channels" Version="4.7.0" />
+  </ItemGroup>
+
+</Project>

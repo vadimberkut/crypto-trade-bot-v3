@@ -19,7 +19,7 @@
     },
     "CryptoTradeBot": {
       "commandName": "Project",
-      "launchBrowser": true,
+      "launchBrowser": false,
       "launchUrl": "",
       "applicationUrl": "http://localhost:9000",
       "environmentVariables": {

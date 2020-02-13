@@ -344,3 +344,7 @@ developer-cert.pfx
 
 # secrets
 Secrets/
+
+# data logs
+data-logs/
+

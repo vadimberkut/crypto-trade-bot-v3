@@ -12,6 +12,7 @@ namespace CryptoTradeBot
 
     public class BinanceSettings
     {
+        public string WssUrl { get; set; }
         public string ApiKey { get; set; }
         public string SecretKey { get; set; }
     }
