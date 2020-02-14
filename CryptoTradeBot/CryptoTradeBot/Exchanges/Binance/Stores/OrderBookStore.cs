@@ -1,6 +1,7 @@
 ﻿using CryptoTradeBot.Exchanges.Binance.Models;
 using Newtonsoft.Json;
 using System;
+using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -9,7 +10,8 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
 {
     public class OrderBookStore
     {
-        private Dictionary<string, OrderBookSymbolModel> _store = new Dictionary<string, OrderBookSymbolModel>();
+        private ConcurrentDictionary<string, OrderBookSymbolModel> _store = new ConcurrentDictionary<string, OrderBookSymbolModel>();
+        private object _lock = new object();
 
         public OrderBookStore()
         {
@@ -18,12 +20,7 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
 
         public void ReplaceSymbolOrderBook(string symbol, OrderBookSymbolModel orderBook)
         {
-            if(!_store.ContainsKey(symbol))
-            {
-                _store.Add(symbol, null);
-            }
-
-            _store[symbol] = orderBook;
+            _store.TryAdd(symbol, orderBook);
         }
 
         public string SerializeToJson(Formatting formatting = Formatting.None)

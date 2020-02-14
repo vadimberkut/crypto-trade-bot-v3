@@ -3,7 +3,7 @@ Microsoft Visual Studio Solution File, Format Version 12.00
 # Visual Studio Version 16
 VisualStudioVersion = 16.0.29709.97
 MinimumVisualStudioVersion = 10.0.40219.1
-Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CryptoTradeBot", "CryptoTradeBot\CryptoTradeBot.csproj", "{DD782ECA-B537-402F-A970-68886CC2368D}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CryptoTradeBot.Host", "CryptoTradeBot\CryptoTradeBot.Host.csproj", "{DD782ECA-B537-402F-A970-68886CC2368D}"
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CryptoTradeBot.Infrastructure", "CryptoTradeBot.Infrastructure\CryptoTradeBot.Infrastructure.csproj", "{8E0745C8-5592-47C5-9972-23B255D5280E}"
 EndProject
