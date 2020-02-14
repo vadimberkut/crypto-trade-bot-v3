@@ -27,5 +27,16 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
         {
             return JsonConvert.SerializeObject(this._store, formatting);
         }
+
+        public void ImportFromJson(string json)
+        {
+            var nextStore = JsonConvert.DeserializeObject<ConcurrentDictionary<string, OrderBookSymbolModel>>(json);
+            
+            this._store.Clear();
+            foreach (var pair in nextStore)
+            {
+                this._store.TryAdd(pair.Key, pair.Value);
+            }
+        }
     }
 }

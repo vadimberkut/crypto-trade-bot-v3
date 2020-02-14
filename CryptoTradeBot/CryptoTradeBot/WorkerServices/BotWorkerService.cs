@@ -18,6 +18,7 @@ using CryptoTradeBot.Exchanges.Binance.Handlers;
 using System.IO;
 using CryptoTradeBot.Exchanges.Binance.Stores;
 using System.Diagnostics;
+using CryptoTradeBot.Host.Exchanges.Binance.Clients;
 
 namespace CryptoTradeBot.WorkerServices
 {
@@ -26,24 +27,36 @@ namespace CryptoTradeBot.WorkerServices
         private readonly ILogger<BotWorkerService> _logger;
         private readonly IOptions<ApplicationSettings> _config;
         private readonly IServiceProvider _serviceProvider;
+        private readonly BinanceHttpClient _binanceHttpClient;
         private readonly BinanceWssClient _binanceWssClient;
 
         public BotWorkerService(
             ILogger<BotWorkerService> logger,
             IOptions<ApplicationSettings> config,
             IServiceProvider serviceProvider,
+            BinanceHttpClient binanceHttpClient,
             BinanceWssClient binanceWssClient
         )
         {
             _logger = logger;
             _config = config;
             _serviceProvider = serviceProvider;
+            _binanceHttpClient = binanceHttpClient;
             _binanceWssClient = binanceWssClient;
         }
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
             _logger.LogInformation("Starting...");
+
+            var isAvailable = await _binanceHttpClient.TestConnectivityAsync();
+            if(!isAvailable)
+            {
+                throw new Exception($"Binance isn't available!");
+            }
+
+            var exchangeInfo = await _binanceHttpClient.ExchangeInformationAsync();
+            exchangeInfo.Symbols = exchangeInfo.Symbols.Where(x => x.Status == "TRADING").ToList();
 
             int depth = 20; // 5, 10 ,20
             var bookStreams = new List<string>()
@@ -185,7 +198,7 @@ namespace CryptoTradeBot.WorkerServices
 
             // save order book to file periodically
             const string orderBookSaveDirPath = "./data-logs/binance/order-book-store";
-            this.SetInterval(async () =>
+            this._SetInterval(async () =>
             {
                 Directory.CreateDirectory(orderBookSaveDirPath);
 
@@ -196,6 +209,8 @@ namespace CryptoTradeBot.WorkerServices
                 File.WriteAllText(Path.Combine(orderBookSaveDirPath, fileName), contents);
                 _logger.LogInformation("Saved order book on disk.");
             }, TimeSpan.FromSeconds(10), cancellationToken);
+
+            // 
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
@@ -207,7 +222,7 @@ namespace CryptoTradeBot.WorkerServices
             return Task.CompletedTask;
         }
 
-        private void SetInterval(Func<Task> action, TimeSpan interval, CancellationToken cancellationToken)
+        private void _SetInterval(Func<Task> action, TimeSpan interval, CancellationToken cancellationToken)
         {
             if (cancellationToken.IsCancellationRequested)
             {
@@ -220,6 +235,7 @@ namespace CryptoTradeBot.WorkerServices
                 await this._IntervalJob(action, interval, cancellationToken);
             });
         }
+      
         private async Task _IntervalJob(Func<Task> action, TimeSpan interval, CancellationToken cancellationToken, DateTime prevRun = default(DateTime))
         {
             await Task.Delay(interval, cancellationToken).ConfigureAwait(false);

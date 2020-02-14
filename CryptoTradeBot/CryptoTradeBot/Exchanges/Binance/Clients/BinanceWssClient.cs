@@ -12,6 +12,7 @@ using System.Threading.Tasks;
 using Websocket.Client;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
+using CryptoTradeBot.Infrastructure.AplicationSettings;
 
 namespace CryptoTradeBot.Exchanges.Binance
 {
@@ -205,7 +206,7 @@ namespace CryptoTradeBot.Exchanges.Binance
         // TODO: refactore
         public void Dispose()
         {
-            _websocketClient.Dispose();
+            _websocketClient?.Dispose();
         }
     }
 }

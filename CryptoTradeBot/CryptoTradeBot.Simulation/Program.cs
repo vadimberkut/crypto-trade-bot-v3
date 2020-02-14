@@ -12,11 +12,11 @@ using Microsoft.Extensions.Logging;
 using Serilog;
 using Serilog.Events;
 
-namespace CryptoTradeBot
+namespace CryptoTradeBot.Simulation
 {
     public class Program
     {
-        private const string _appName = "CryptoTradeBot";
+        private const string _appName = "CryptoTradeBot.Simulation";
 
         public static void Main(string[] args)
         {
