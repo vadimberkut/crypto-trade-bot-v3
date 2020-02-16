@@ -70,7 +70,8 @@ namespace CryptoTradeBot.Simulation.Workers
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
             DateTime prevSnapshotAt = DateTime.MinValue;
             bool isFirstSnapshot = true;
-            for(int i = 0; i < filePathes.Count; i++)
+            TimeSpan simulationTime = TimeSpan.FromSeconds(0);
+            for(int i = 1000; i < filePathes.Count; i++)
             {
                 string filePath = filePathes[i];
                 string fileName = Path.GetFileNameWithoutExtension(filePath);
@@ -84,8 +85,12 @@ namespace CryptoTradeBot.Simulation.Workers
                 var interval = currentSnapshotAt.Subtract(prevSnapshotAt);
                 if (interval > maxIntervalBetweenSnapshots && !isFirstSnapshot)
                 {
+                    isFirstSnapshot = false;
+                    prevSnapshotAt = currentSnapshotAt;
                     continue;
                 }
+
+                simulationTime.Add(interval);
 
                 // setup store from snaphot
                 string fileContent = File.ReadAllText(filePath);
@@ -107,7 +112,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 prevSnapshotAt = currentSnapshotAt;
             }
 
-            _logger.LogInformation("Simulation is done.");
+            _logger.LogInformation($"Simulation is done. Real time simulated: {simulationTime}.");
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

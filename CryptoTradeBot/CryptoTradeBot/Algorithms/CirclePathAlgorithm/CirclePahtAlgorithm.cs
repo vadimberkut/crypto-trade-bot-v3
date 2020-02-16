@@ -106,7 +106,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             // filter out unprofitable solutions
             var profitSolutions = solutions.Where(solution =>
             {
-                return solution.EstimatedProfitInStartAsset >= solution.TargetStartAssetAmount * this._minPathProfitPercent;
+                return solution.EstimatedProfitInStartAsset > 0 && solution.EstimatedProfitInStartAsset >= solution.TargetStartAssetAmount * this._minPathProfitPercent;
             }).ToList();
 
             this._logger.LogInformation($"");
@@ -470,10 +470,10 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                         break;
                     }
 
-                    var bestBid = symbolOrderBook.Bids.OrderByDescending(x => x.Price).First();
-                    var bestAsk = symbolOrderBook.Asks.OrderBy(x => x.Price).First();
+                    const decimal maxPriceDeviationPercentFromTheBestOrder = 0.002m;
+                    var bestBid = symbolOrderBook.AggregateTopBestBidsByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, startAssetAmount);
+                    var bestAsk = symbolOrderBook.AggregateTopBestAsksByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, startAssetAmount);
 
-                    // TODO: aggregate top n the best values from order book
                     decimal bestBidTotal = bestBid.Price * bestBid.Quantity;
                     decimal bestAskTotal = bestAsk.Price * bestAsk.Quantity;
 
