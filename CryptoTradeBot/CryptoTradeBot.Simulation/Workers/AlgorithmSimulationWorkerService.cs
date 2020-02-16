@@ -70,11 +70,12 @@ namespace CryptoTradeBot.Simulation.Workers
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
             DateTime prevSnapshotAt = DateTime.MinValue;
             bool isFirstSnapshot = true;
-            foreach (var filePath in filePathes.Take(1))
+            for(int i = 0; i < filePathes.Count; i++)
             {
+                string filePath = filePathes[i];
                 string fileName = Path.GetFileNameWithoutExtension(filePath);
 
-                _logger.LogInformation($"----------Processing '{fileName}'...");
+                _logger.LogInformation($"----------Processing ({i + 1}/{filePathes.Count}) '{fileName}'...");
 
                 DateTime currentSnapshotAt = DateTime.ParseExact(fileName, "yyyyMMdd'T'HHmmss'.'fff'Z'", null);
                 DateTime.SpecifyKind(currentSnapshotAt, DateTimeKind.Utc);
@@ -83,7 +84,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 var interval = currentSnapshotAt.Subtract(prevSnapshotAt);
                 if (interval > maxIntervalBetweenSnapshots && !isFirstSnapshot)
                 {
-                    break;
+                    continue;
                 }
 
                 // setup store from snaphot
@@ -92,14 +93,21 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 // run algorith
                 string startAsset = "IOTA";
-                circlePathAlgorithm.Solve(startAsset);
+                decimal startAssetAmount = 1000;
+                var solutions = circlePathAlgorithm.Solve(startAsset, startAssetAmount);
 
+                if(solutions.Count != 0)
+                {
+                    var a = 1;
+                }
 
-                _logger.LogInformation($"----------Processed '{fileName}'.");
+                _logger.LogInformation($"----------Processed ({i + 1}/{filePathes.Count}) '{fileName}'.");
 
                 isFirstSnapshot = false;
                 prevSnapshotAt = currentSnapshotAt;
             }
+
+            _logger.LogInformation("Simulation is done.");
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

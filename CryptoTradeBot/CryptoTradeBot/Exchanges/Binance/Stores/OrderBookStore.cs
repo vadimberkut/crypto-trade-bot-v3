@@ -20,7 +20,7 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
 
         public void ReplaceSymbolOrderBook(string symbol, OrderBookSymbolModel orderBook)
         {
-            _store.TryAdd(symbol, orderBook);
+            _store.TryAdd(symbol.ToLowerInvariant(), orderBook);
         }
 
         public string SerializeToJson(Formatting formatting = Formatting.None)
@@ -35,8 +35,17 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
             this._store.Clear();
             foreach (var pair in nextStore)
             {
-                this._store.TryAdd(pair.Key, pair.Value);
+                this._store.TryAdd(pair.Key.ToLowerInvariant(), pair.Value);
             }
+        }
+
+        public OrderBookSymbolModel GetOrderBookForSymbol(string symbol)
+        {
+            if(this._store.TryGetValue(symbol.ToLowerInvariant(), out OrderBookSymbolModel result))
+            {
+                return result;
+            }
+            return null;
         }
     }
 }

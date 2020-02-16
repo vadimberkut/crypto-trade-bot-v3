@@ -3,6 +3,7 @@ using CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm.Models;
 using CryptoTradeBot.Host.Interfaces;
 using CryptoTradeBot.Host.Models;
 using CryptoTradeBot.Infrastructure.Enums;
+using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm.Models;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -22,11 +23,11 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         private List<string> _states;
         private List<StateTransitionModel> _stateTransitions;
 
-        private const int _minAllowedPathLenght = 2;
+        private const int _minAllowedPathLenght = 3; // 2 is meaningless, so use 3. E.g. of 2: IOTA -> USDT -> IOTA
         private const int _maxAllowedPathLength = 10;
         private const decimal _minAllowedPathProfitPercent = 0.002m;
 
-        private int _minPathLenght = 2;
+        private int _minPathLenght = 3;
         private int _maxPathLength = 3;
         private decimal _minPathProfitPercent = 0.003m;
 
@@ -53,7 +54,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         }
 
         // TODO: return decision object that can be consumed by algorithm executor
-        public void Solve(string startAsset)
+        public List<CirclePathSolutionItemModel> Solve(string startAsset, decimal startAssetAmount)
         {
             /*
              * Symbol: usually is the same as pair, but can be in different format. E.g. For Bitfinex: tBTCUSD
@@ -74,12 +75,47 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
              */
 
             string startState = startAsset;
-            var pathFindResult = this._FindPath(startState, new List<string>() { startState });
-            var solutionTreeRoot = pathFindResult[0];
 
-            this._PrintPath(solutionTreeRoot);
+            // find possible pathes from start state (root) to end state (leaf) according to limitations
+            // requirement: root == leaf
+            // result: tree
+            // TODO: cache as results are the same usually
+            var pathFindResult = this._FindPathTree(startState, new List<string>() { startState });
+            var pathFindResultTreeRoot = pathFindResult[0];
+            // this._PrintPath(pathFindResultTreeRoot);
 
-            int a = 1;
+            // get final path list (not nested structure) from prev tree result
+            // result: list of lists
+            var pathList = this._BuildPathListFromTree(pathFindResultTreeRoot);
+            // this._PrintPathList(pathList);
+
+            // filter out circular pathes. 
+            // e.g. IOT -> USD -> IOT -> USD -> IOT
+            // i.e. where start state occurs more than twice (should apear only at the start and the end)
+            pathList = pathList.Where(path => path.Count(state => state == startState) == 2).ToList();
+
+            // filter out pathes with duplicate intermediate states. 
+            // e.g. ... -> BCH -> USD -> BCH -> ...; ... USD -> ETH -> IOT -> USD -> ...
+            pathList = pathList.Where(path => {
+                var otherStates = path.GetRange(1, path.Count - 2);
+                return otherStates.Count() == otherStates.Distinct().Count();
+            }).ToList();
+
+            var solutions = this._ProcessPathList(pathList, startAssetAmount);
+
+            // filter out unprofitable solutions
+            var profitSolutions = solutions.Where(solution =>
+            {
+                return solution.EstimatedProfitInStartAsset >= solution.TargetStartAssetAmount * this._minPathProfitPercent;
+            }).ToList();
+
+            this._logger.LogInformation($"");
+            this._logger.LogInformation($"Result:");
+            this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
+            this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
+            this._logger.LogInformation($"");
+
+            return profitSolutions;
         }
 
         /// <summary>
@@ -114,7 +150,9 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         }
 
         /// <summary>
-        /// Recursive. For list of transitions finds states that we can go from the specisifed state.
+        /// Recursive.
+        /// <br/>
+        /// For list of transitions finds states that we can go from the specisifed state.
         /// <br/>
         /// Check doc about transitions.
         /// </summary>
@@ -141,7 +179,19 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             return result;
         }
 
-        private List<CirclePathTreeNodeModel> _FindPath(string absoluteStartState, List<string> relativeStartStates, int pathLength = -1)
+        /// <summary>
+        /// Recursive.
+        /// <br/>
+        /// Finds a set of pathes which describes a valid transition from start state back to itself 
+        /// according to min/max path length limitations.
+        /// <br/>
+        /// Result: A tree that represents valid pathes.
+        /// </summary>
+        /// <param name="absoluteStartState">Static param, doesn't change accross recursive calls.</param>
+        /// <param name="relativeStartStates">Dynamic param that changes accross recursive calls.</param>
+        /// <param name="pathLength">Dynamic param that changes accross recursive calls.</param>
+        /// <returns></returns>
+        private List<CirclePathTreeNodeModel> _FindPathTree(string absoluteStartState, List<string> relativeStartStates, int pathLength = -1)
         {
             pathLength += 1;
 
@@ -160,7 +210,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     if (state == absoluteStartState)
                     {
                         // min length circle path reached
-                        this._logger.LogInformation($"Found min length circle path: {absoluteStartState} -> {state}. len={pathLength}.");
+                        // this._logger.LogInformation($"Found min length circle path: {absoluteStartState} -> {state}. len={pathLength}.");
                         return new CirclePathTreeNodeModel()
                         {
                             State = state,
@@ -175,7 +225,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     if (state == absoluteStartState)
                     {
                         // ended in absolute start state - desired result
-                        this._logger.LogInformation($"Max level reached: {absoluteStartState} -> ... -> {state}. len={pathLength}.");
+                        // this._logger.LogInformation($"Max level reached: {absoluteStartState} -> ... -> {state}. len={pathLength}.");
                         return new CirclePathTreeNodeModel() 
                         {
                             State = state,
@@ -200,7 +250,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 
                 // recursive call
                 // traverse down to the tree
-                var nextResults = this._FindPath(absoluteStartState, nextStates, pathLength);
+                var nextResults = this._FindPathTree(absoluteStartState, nextStates, pathLength);
                 if (nextResults != null)
                 {
                     var result = new CirclePathTreeNodeModel()
@@ -227,13 +277,13 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         private void _PrintPath(CirclePathTreeNodeModel treeRoot)
         {
             this._logger.LogInformation($"");
-            this._logger.LogInformation($"----------START Circle path list.");
+            this._logger.LogInformation($"----------START Circle path tree.");
             var pathList = this._GetPathesAsStringList(new List<CirclePathTreeNodeModel>() { treeRoot });
             foreach (var pathItem in pathList)
             {
                 this._logger.LogInformation(pathItem);
             }
-            this._logger.LogInformation($"----------END Circle path list.");
+            this._logger.LogInformation($"----------END Circle path tree.");
             this._logger.LogInformation($"");
         }
         private List<string> _GetPathesAsStringList(List<CirclePathTreeNodeModel> treeNodes)
@@ -247,7 +297,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             {
                 if (treeNode.IsLeafNode)
                 {
-                    return new List<string>() { treeNode.State };
+                    return new List<string>() { $"{treeNode.State} (len={treeNode.PathLength})" };
                 }
                 else
                 {
@@ -266,6 +316,228 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 
             var filenalResult = treeNodesResults.SelectMany(x => x).ToList();
             return filenalResult;
+        }
+
+        /// <summary>
+        /// Traverses the pathes tree and returns a list of pathes.
+        /// </summary>
+        /// <param name="pathFindResultTreeNode"></param>
+        /// <returns></returns>
+        private List<List<string>> _BuildPathListFromTree(CirclePathTreeNodeModel pathFindResultTreeNode)
+        {
+            // recursion safety stop condition 0
+            if (pathFindResultTreeNode == null)
+            {
+                return null;
+            }
+
+            //var result = new List<List<string>>();
+
+            // recursion stop condition 1
+            if (pathFindResultTreeNode.IsLeafNode)
+            {
+                return new List<List<string>>() 
+                {
+                    new List<string>() { pathFindResultTreeNode.State  }
+                };
+            }
+            else
+            {
+                // recursive call
+                var nextResults = pathFindResultTreeNode.NextNodes
+                    .Select(nextNode => this._BuildPathListFromTree(nextNode))
+                    .SelectMany(nextResult => nextResult) // flatten
+                    .Select(nextResult => {
+                        // prepend with current state
+                        nextResult.Insert(0, pathFindResultTreeNode.State);
+                        return nextResult;
+                    })
+                    .ToList();
+
+                return nextResults;
+            }
+        }
+
+        private void _PrintPathList(List<List<string>> pathList)
+        {
+            this._logger.LogInformation($"");
+            this._logger.LogInformation($"----------START Circle path list.");
+            foreach (var pathItem in pathList)
+            {
+                this._logger.LogInformation(string.Join(" ->", pathItem));
+            }
+            this._logger.LogInformation($"----------END Circle path list.");
+            this._logger.LogInformation($"");
+        }
+
+        /// <summary>
+        /// Not recursive.
+        /// <br/>
+        /// 
+        /// </summary>
+        /// <param name="pathList"></param>
+        private List<CirclePathSolutionItemModel> _ProcessPathList(List<List<string>> pathList, decimal startAssetAmount)
+        {
+            var solutions = new List<CirclePathSolutionItemModel>();
+            foreach (var path in pathList)
+            {
+                // get state instruction for each path
+                var pathInstructions = new List<PathStateInstructionModel>();
+                for (var i = 0; i < path.Count; i++)
+                {
+                    string state = path[i];
+                    string nextState = null;
+
+                    if (i == path.Count - 1)
+                    {
+                        // for the last state return 'do nothing' instruction
+                        pathInstructions.Add(new PathStateInstructionModel()
+                        {
+                            IsStart = false,
+                            IsEnd = true,
+                            State = state,
+                            NextState = null,
+                            Action = SymbolAction.None,
+                            Transition = null,
+                        });
+                        break;
+                    }
+
+                    if (i != path.Count - 1)
+                    {
+                        nextState = path[i + 1];
+                    }
+
+                    // find transition the next state
+                    var transition = this._stateTransitions.FirstOrDefault(x => (x.State1 == state && x.State2 == nextState) || (x.State1 == nextState && x.State2 == state));
+                    if (transition == null)
+                    {
+                        this._logger.LogError($"Can't find transition from '{state}' to '{nextState}'.");
+                        break;
+                    }
+
+                    // determine action: buy/sell
+                    SymbolAction action = SymbolAction.None;
+                    if (i != path.Count - 1)
+                    {
+                        action = this._exchangeUtil.GetSymbolAction(transition.Symbol, state);
+                        if (action == SymbolAction.None)
+                        {
+                            this._logger.LogError($"Can't find symbol action (buy/sell) for '{state}' using transition '{transition.Symbol}'.");
+                            break;
+                        }
+                    }
+
+                    pathInstructions.Add(new PathStateInstructionModel()
+                    {
+                        IsStart = i == 0,
+                        IsEnd = false,
+                        State = state,
+                        NextState = nextState,
+                        Action = action,
+                        Transition = transition,
+                    });
+                }
+
+                // simulate path instructions and estimate profit
+                // 1. use MARKET orders
+                // 2. use LIMIT orders (TODO: add, but move to separate method to preserve already implemented logic)
+
+                // TODO: figure out how to pinpoint the optimized start amount, so we get the first, the best orders in the book and not oversell/overbuy
+                // TODO: due to too large start amount that can lead to losses at the last transitions. As some markets can not be liquid.
+                decimal actualStartAssetAmount = startAssetAmount;
+                decimal currentAssetAmount = startAssetAmount;
+                bool isInterrupted = false;
+                foreach (var pathInstruction in pathInstructions)
+                {
+                    // if reached the end - exit
+                    if (pathInstruction.IsEnd)
+                    {
+                        break;
+                    }
+
+                    var symbolOrderBook = this._orderBookStore.GetOrderBookForSymbol(pathInstruction.Transition.Symbol);
+                    if (symbolOrderBook == null)
+                    {
+                        this._logger.LogError($"Can't find order book for '{pathInstruction.Transition.Symbol}'.");
+                        isInterrupted = true;
+                        break;
+                    }
+                    if (symbolOrderBook.Bids.Count == 0 || symbolOrderBook.Asks.Count == 0)
+                    {
+                        this._logger.LogError($"Order book for '{pathInstruction.Transition.Symbol}' is empty.");
+                        isInterrupted = true;
+                        break;
+                    }
+
+                    var bestBid = symbolOrderBook.Bids.OrderByDescending(x => x.Price).First();
+                    var bestAsk = symbolOrderBook.Asks.OrderBy(x => x.Price).First();
+
+                    // TODO: aggregate top n the best values from order book
+                    decimal bestBidTotal = bestBid.Price * bestBid.Quantity;
+                    decimal bestAskTotal = bestAsk.Price * bestAsk.Quantity;
+
+                    // detrmine the best start amount
+                    if(pathInstruction.IsStart)
+                    {
+                        if (pathInstruction.Action == SymbolAction.Buy)
+                        {
+                            // adjust amout to according to order book best values
+                            decimal wantToBuyAmount = currentAssetAmount / bestAsk.Price; // according to wallet
+                            decimal canToBuyAmount = bestAsk.Quantity; // according to order book
+                            actualStartAssetAmount = Math.Min(wantToBuyAmount, canToBuyAmount);
+                            currentAssetAmount = actualStartAssetAmount;
+                        }
+                        else if (pathInstruction.Action == SymbolAction.Sell)
+                        {
+                            // adjust amout to according to order book best values
+                            decimal wantToSellAmount = currentAssetAmount; // according to wallet
+                            decimal canToSellAmount = bestBid.Quantity; // according to order book
+                            actualStartAssetAmount = Math.Min(wantToSellAmount, canToSellAmount);
+                            currentAssetAmount = actualStartAssetAmount;
+                        }
+                    }
+
+                    decimal actionTotal;
+                    if (pathInstruction.Action == SymbolAction.Buy)
+                    {
+                        actionTotal = currentAssetAmount / bestAsk.Price;
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+
+                        // moved to the next asset
+                        currentAssetAmount = actionTotal;
+                    }
+                    else if (pathInstruction.Action == SymbolAction.Sell)
+                    {
+                        actionTotal = currentAssetAmount * bestBid.Price;
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+
+                        // moved to the next asset
+                        currentAssetAmount = actionTotal;
+                    }
+                }
+
+                decimal estimatedProfit = 0;
+                if (isInterrupted)
+                {
+                    estimatedProfit = 0;
+                }
+                else
+                {
+                    estimatedProfit = currentAssetAmount - actualStartAssetAmount;
+                }
+
+                solutions.Add(new CirclePathSolutionItemModel()
+                {
+                    Path = path,
+                    Instructions = pathInstructions,
+                    EstimatedProfitInStartAsset = estimatedProfit,
+                    AvailableStartAssetAmount = startAssetAmount,
+                    TargetStartAssetAmount = actualStartAssetAmount,
+                });
+            }
+
+            return solutions;
         }
     }
 }

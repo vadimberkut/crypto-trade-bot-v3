@@ -13,6 +13,16 @@ namespace CryptoTradeBot.Host.Interfaces
     public interface IExchangeUtil
     {
         /// <summary>
+        /// The one who places LIMIT order and it is filfilled by order placed by taker
+        /// </summary>
+        decimal MakerFee { get; }
+       
+        /// <summary>
+        /// The one who places order, usually MARKET, and fulfils already placed LIMIT order by maker.
+        /// </summary>
+        decimal TakerFee { get; }
+
+        /// <summary>
         /// Returns available or selected symbols for exchange.
         /// </summary>
         /// <returns></returns>

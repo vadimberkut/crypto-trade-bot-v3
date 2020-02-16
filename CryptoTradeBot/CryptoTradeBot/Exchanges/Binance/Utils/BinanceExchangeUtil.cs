@@ -33,6 +33,10 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             _exchangeInfo = _binanceHttpClient.ExchangeInformationAsync().GetAwaiter().GetResult();
         }
 
+        public decimal MakerFee => 0.001m;
+
+        public decimal TakerFee => 0.001m;
+
         public List<string> GetSymbols()
         {
             var symbolInfos = this._exchangeInfo.Symbols.ToList();
