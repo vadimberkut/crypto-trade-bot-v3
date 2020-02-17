@@ -23,6 +23,8 @@ using CryptoTradeBot.WorkerServices;
 using CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm;
 using CryptoTradeBot.Host.Interfaces;
 using CryptoTradeBot.Host.Exchanges.Binance.Utils;
+using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm.Models;
+using CryptoTradeBot.Infrastructure.Extensions;
 
 namespace CryptoTradeBot.Simulation.Workers
 {
@@ -69,9 +71,12 @@ namespace CryptoTradeBot.Simulation.Workers
             var orderBookStore = _serviceProvider.GetRequiredService<OrderBookStore>();
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
             DateTime prevSnapshotAt = DateTime.MinValue;
+            TimeSpan maxIntervalBetweenSnapshots = TimeSpan.FromSeconds((10 + 5));
+            TimeSpan snapshotToSelectWindow = TimeSpan.FromSeconds(30);
             bool isFirstSnapshot = true;
             TimeSpan simulationTime = TimeSpan.FromSeconds(0);
-            for(int i = 1000; i < filePathes.Count; i++)
+            List<CirclePathSolutionItemModel> bestSolutionsFroEachIteration = new List<CirclePathSolutionItemModel>();
+            for (int i = 0; i < filePathes.Count; i += 1)
             {
                 string filePath = filePathes[i];
                 string fileName = Path.GetFileNameWithoutExtension(filePath);
@@ -81,16 +86,20 @@ namespace CryptoTradeBot.Simulation.Workers
                 DateTime currentSnapshotAt = DateTime.ParseExact(fileName, "yyyyMMdd'T'HHmmss'.'fff'Z'", null);
                 DateTime.SpecifyKind(currentSnapshotAt, DateTimeKind.Utc);
 
-                TimeSpan maxIntervalBetweenSnapshots = TimeSpan.FromSeconds(10 + 5);
-                var interval = currentSnapshotAt.Subtract(prevSnapshotAt);
-                if (interval > maxIntervalBetweenSnapshots && !isFirstSnapshot)
+                //if (intervalBetweenSnapshots < snapshotToSelectWindow)
+                //{
+                //    continue;
+                //}
+
+                var intervalBetweenSnapshots = currentSnapshotAt.Subtract(prevSnapshotAt);
+                if (intervalBetweenSnapshots > maxIntervalBetweenSnapshots && !isFirstSnapshot)
                 {
                     isFirstSnapshot = false;
                     prevSnapshotAt = currentSnapshotAt;
                     continue;
                 }
 
-                simulationTime.Add(interval);
+                simulationTime.Add(intervalBetweenSnapshots);
 
                 // setup store from snaphot
                 string fileContent = File.ReadAllText(filePath);
@@ -103,7 +112,13 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 if(solutions.Count != 0)
                 {
-                    var a = 1;
+                    // take the most profitable
+                    bestSolutionsFroEachIteration.Add(solutions.OrderByDescending(x => x.SimulationResult.EstimatedProfitInStartAsset).First());
+                    
+                    foreach (var solution in solutions)
+                    {
+                        _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}.");
+                    }
                 }
 
                 _logger.LogInformation($"----------Processed ({i + 1}/{filePathes.Count}) '{fileName}'.");
@@ -112,7 +127,57 @@ namespace CryptoTradeBot.Simulation.Workers
                 prevSnapshotAt = currentSnapshotAt;
             }
 
+            // take only uniq results - filter out repeatable
+            var aggregatedDictionary = bestSolutionsFroEachIteration
+                .Select(solution => new Tuple<string, CirclePathSolutionItemModel>(solution.PathId, solution))
+                .Aggregate
+                    <Tuple<string, CirclePathSolutionItemModel>, Dictionary<string, IEnumerable<CirclePathSolutionItemModel>>>
+                    (new Dictionary<string, IEnumerable<CirclePathSolutionItemModel>>(), (accum, curr) =>
+                    {
+                        if(!accum.ContainsKey(curr.Item1))
+                        {
+                            accum.Add(curr.Item1, new List<CirclePathSolutionItemModel>());
+                        }
+                        (accum[curr.Item1] as List<CirclePathSolutionItemModel>).Add(curr.Item2);
+                        return accum;
+                    });
+
+            var aggregatedUniqueDictionary = aggregatedDictionary
+                .Distinct()
+                .DistinctByKeyValues(x => x.SimulationResult.EstimatedProfitInStartAsset)
+                .ToDictionary(x => x.Key, y => y.Value);
+
+            var uniqueBestSolutionsFroEachIteration = aggregatedUniqueDictionary.SelectMany(x => x.Value).ToList();
+
+            //// 2
+            //var dict = new Dictionary<string, Dictionary<string, CirclePathSolutionItemModel>>();
+            //foreach (var item in bestSolutionsFroEachIteration)
+            //{
+            //    if(!dict.ContainsKey(item.PathId))
+            //    {
+            //        dict.Add(item.PathId, new Dictionary<string, CirclePathSolutionItemModel>());
+            //    }
+            //    if (!dict[item.PathId].ContainsKey(item.SimulationResult.EstimatedProfitInStartAsset.ToString("0.########")))
+            //    {
+            //        dict[item.PathId].Add(item.SimulationResult.EstimatedProfitInStartAsset.ToString("0.########"), item);
+            //    }
+            //}
+            //var dcitres = dict.ToList().Select(x => x.Value).SelectMany(x => x.Values.Select(y => y)).ToList();
+
+            _logger.LogInformation($"");
             _logger.LogInformation($"Simulation is done. Real time simulated: {simulationTime}.");
+
+            _logger.LogInformation($"");
+            _logger.LogInformation($"Solution list:");
+            foreach (var solution in uniqueBestSolutionsFroEachIteration)
+            {
+                _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}, pathId={solution.PathId}.");
+            }
+
+            // calc total profit
+            var totalEstimatedProfit = uniqueBestSolutionsFroEachIteration.Aggregate<CirclePathSolutionItemModel, decimal>(0, (accum, curr) => accum + curr.SimulationResult.EstimatedProfitInStartAsset);
+            _logger.LogInformation($"");
+            _logger.LogInformation($"Solution total: profit={totalEstimatedProfit}.");
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

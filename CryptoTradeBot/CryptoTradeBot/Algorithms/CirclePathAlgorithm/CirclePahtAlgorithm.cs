@@ -25,11 +25,11 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 
         private const int _minAllowedPathLenght = 3; // 2 is meaningless, so use 3. E.g. of 2: IOTA -> USDT -> IOTA
         private const int _maxAllowedPathLength = 10;
-        private const decimal _minAllowedPathProfitPercent = 0.002m;
+        private const decimal _minAllowedPathProfitPercent = 0.0015m;
 
         private int _minPathLenght = 3;
         private int _maxPathLength = 3;
-        private decimal _minPathProfitPercent = 0.003m;
+        private decimal _minPathProfitPercent = 0.0015m;
 
         public CirclePahtAlgorithm(
             ILogger<CirclePahtAlgorithm> logger,
@@ -101,19 +101,46 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                 return otherStates.Count() == otherStates.Distinct().Count();
             }).ToList();
 
-            var solutions = this._ProcessPathList(pathList, startAssetAmount);
+            // get solutions
+            var solutions = this._ProcessPathListAndGetSolution(pathList, startAssetAmount);
+
+            ////// simulate solutions
+            
+            //// simulate with MARKET orders
+            solutions = this._SimulateSolutionsWithMarketOrders(solutions, startAssetAmount);
 
             // filter out unprofitable solutions
             var profitSolutions = solutions.Where(solution =>
             {
-                return solution.EstimatedProfitInStartAsset > 0 && solution.EstimatedProfitInStartAsset >= solution.TargetStartAssetAmount * this._minPathProfitPercent;
+                return 
+                    solution.SimulationResult.EstimatedProfitInStartAsset > 0 && 
+                    solution.SimulationResult.EstimatedProfitInStartAsset >= 
+                        solution.SimulationResult.TargetStartAssetAmount * this._minPathProfitPercent;
             }).ToList();
 
-            this._logger.LogInformation($"");
-            this._logger.LogInformation($"Result:");
-            this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
-            this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
-            this._logger.LogInformation($"");
+            //this._logger.LogInformation($"");
+            //this._logger.LogInformation($"Result for MARKET orders:");
+            //this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
+            //this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
+            //this._logger.LogInformation($"");
+
+            //// simulate with LIMIT orders
+            solutions = this._SimulateSolutionsWithLimitOrders(solutions, startAssetAmount);
+
+            // filter out unprofitable solutions
+            profitSolutions = solutions.Where(solution =>
+            {
+                return
+                    solution.SimulationResult.EstimatedProfitInStartAsset > 0 &&
+                    solution.SimulationResult.EstimatedProfitInStartAsset >= 
+                        solution.SimulationResult.TargetStartAssetAmount * this._minPathProfitPercent;
+            }).ToList();
+
+            //this._logger.LogInformation($"");
+            //this._logger.LogInformation($"Result for LIMIT orders:");
+            //this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
+            //this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
+            //this._logger.LogInformation($"");
 
             return profitSolutions;
         }
@@ -128,12 +155,12 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 
             // get state transitions (currency pair names) e.g. {symbol: tIOTUSD, state1: IOT, state2: USD, bidirectional: true}
             this._stateTransitions = _symbols.Select((symbol) => {
-                var assetModel = this._exchangeUtil.ConvertSymbolToAssets(symbol);
+                var symBolInfo = this._exchangeUtil.GetSymbolInfo(symbol);
                 return new StateTransitionModel()
                 {
-                    Symbol = assetModel.Symbol,
-                    State1 = assetModel.Base,
-                    State2 = assetModel.Quote,
+                    Symbol = symBolInfo.Symbol,
+                    State1 = symBolInfo.Base,
+                    State2 = symBolInfo.Quote,
                 };
             }).ToList();
         }
@@ -373,10 +400,10 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         /// <summary>
         /// Not recursive.
         /// <br/>
-        /// 
+        /// Returns solution for a path list.
         /// </summary>
         /// <param name="pathList"></param>
-        private List<CirclePathSolutionItemModel> _ProcessPathList(List<List<string>> pathList, decimal startAssetAmount)
+        private List<CirclePathSolutionItemModel> _ProcessPathListAndGetSolution(List<List<string>> pathList, decimal startAssetAmount)
         {
             var solutions = new List<CirclePathSolutionItemModel>();
             foreach (var path in pathList)
@@ -439,6 +466,21 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     });
                 }
 
+                solutions.Add(new CirclePathSolutionItemModel()
+                {
+                    Path = path,
+                    Instructions = pathInstructions,
+                    SimulationResult = null,
+                });
+            }
+
+            return solutions;
+        }
+
+        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithMarketOrders(List<CirclePathSolutionItemModel> solutions, decimal startAssetAmount)
+        {
+            foreach (var solution in solutions)
+            {
                 // simulate path instructions and estimate profit
                 // 1. use MARKET orders
                 // 2. use LIMIT orders (TODO: add, but move to separate method to preserve already implemented logic)
@@ -448,7 +490,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                 decimal actualStartAssetAmount = startAssetAmount;
                 decimal currentAssetAmount = startAssetAmount;
                 bool isInterrupted = false;
-                foreach (var pathInstruction in pathInstructions)
+                foreach (var pathInstruction in solution.Instructions)
                 {
                     // if reached the end - exit
                     if (pathInstruction.IsEnd)
@@ -478,7 +520,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     decimal bestAskTotal = bestAsk.Price * bestAsk.Quantity;
 
                     // detrmine the best start amount
-                    if(pathInstruction.IsStart)
+                    if (pathInstruction.IsStart)
                     {
                         if (pathInstruction.Action == SymbolAction.Buy)
                         {
@@ -527,14 +569,129 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     estimatedProfit = currentAssetAmount - actualStartAssetAmount;
                 }
 
-                solutions.Add(new CirclePathSolutionItemModel()
+                solution.SimulationResult = new CirclePathSolutionItemSimlationResultModel()
                 {
-                    Path = path,
-                    Instructions = pathInstructions,
-                    EstimatedProfitInStartAsset = estimatedProfit,
                     AvailableStartAssetAmount = startAssetAmount,
-                    TargetStartAssetAmount = actualStartAssetAmount,
-                });
+                    TargetStartAssetAmount = decimal.Round(actualStartAssetAmount, 8),
+                    EstimatedProfitInStartAsset = decimal.Round(estimatedProfit, 8),
+                };
+            }
+
+            return solutions;
+        }
+
+        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithLimitOrders(List<CirclePathSolutionItemModel> solutions, decimal startAssetAmount)
+        {
+            foreach (var solution in solutions)
+            {
+                // simulate path instructions and estimate profit
+                // 1. use MARKET orders
+                // 2. use LIMIT orders
+
+                // TODO: figure out how to pinpoint the optimized start amount, so we get the first, the best orders in the book and not oversell/overbuy
+                // TODO: due to too large start amount that can lead to losses at the last transitions. As some markets can not be liquid.
+                decimal actualStartAssetAmount = startAssetAmount;
+                decimal currentAssetAmount = startAssetAmount;
+                bool isInterrupted = false;
+                foreach (var pathInstruction in solution.Instructions)
+                {
+                    // if reached the end - exit
+                    if (pathInstruction.IsEnd)
+                    {
+                        break;
+                    }
+
+                    var symbolOrderBook = this._orderBookStore.GetOrderBookForSymbol(pathInstruction.Transition.Symbol);
+                    if (symbolOrderBook == null)
+                    {
+                        this._logger.LogError($"Can't find order book for '{pathInstruction.Transition.Symbol}'.");
+                        isInterrupted = true;
+                        break;
+                    }
+                    if (symbolOrderBook.Bids.Count == 0 || symbolOrderBook.Asks.Count == 0)
+                    {
+                        this._logger.LogError($"Order book for '{pathInstruction.Transition.Symbol}' is empty.");
+                        isInterrupted = true;
+                        break;
+                    }
+
+                    const decimal maxPriceDeviationPercentFromTheBestOrder = 0.002m;
+                    var bestBid = symbolOrderBook.AggregateTopBestBidsByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, startAssetAmount);
+                    var bestAsk = symbolOrderBook.AggregateTopBestAsksByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, startAssetAmount);
+
+                    decimal bestBidTotal = bestBid.Price * bestBid.Quantity;
+                    decimal bestAskTotal = bestAsk.Price * bestAsk.Quantity;
+
+                    // select best bid by adding the min price to the bid
+                    // select best ask by subtracting the min price from the ask
+                    var symbolInfo = this._exchangeUtil.GetSymbolInfo(pathInstruction.Transition.Symbol);
+                    if (symbolInfo == null)
+                    {
+                        this._logger.LogError($"Can't find info for symbol '{pathInstruction.Transition.Symbol}' in '{this._exchangeUtil.ExchangeName}' exchange info.");
+                        isInterrupted = true;
+                        break;
+                    }
+                    string minSymbolPriceChangeStr = $"0.{string.Join("", Enumerable.Range(0, symbolInfo.QuotePrecision).Select((x, i) => i == 0 ? "1" : "0").Reverse())}";
+                    decimal minSymbolPriceChangeValue = decimal.Parse(minSymbolPriceChangeStr);
+                    decimal targetBestBidPrice = bestBid.Price + minSymbolPriceChangeValue;
+                    decimal targetBestAskPrice = bestAsk.Price - minSymbolPriceChangeValue;
+
+                    // detrmine the best start amount
+                    if (pathInstruction.IsStart)
+                    {
+                        if (pathInstruction.Action == SymbolAction.Buy)
+                        {
+                            // adjust amount according to opposite order book top orders amount
+                            decimal wantToBuyAmount = currentAssetAmount / targetBestBidPrice; // according to wallet
+                            decimal canToBuyAmount = bestAsk.Quantity; // according to order book
+                            actualStartAssetAmount = Math.Min(wantToBuyAmount, canToBuyAmount);
+                            currentAssetAmount = actualStartAssetAmount;
+                        }
+                        else if (pathInstruction.Action == SymbolAction.Sell)
+                        {
+                            // adjust amount according to opposite order book top orders amount
+                            decimal wantToSellAmount = currentAssetAmount; // according to wallet
+                            decimal canToSellAmount = bestBid.Quantity; // according to order book
+                            actualStartAssetAmount = Math.Min(wantToSellAmount, canToSellAmount);
+                            currentAssetAmount = actualStartAssetAmount;
+                        }
+                    }
+
+                    decimal actionTotal;
+                    if (pathInstruction.Action == SymbolAction.Buy)
+                    {
+                        actionTotal = currentAssetAmount / targetBestBidPrice;
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+
+                        // moved to the next asset
+                        currentAssetAmount = actionTotal;
+                    }
+                    else if (pathInstruction.Action == SymbolAction.Sell)
+                    {
+                        actionTotal = currentAssetAmount * targetBestAskPrice;
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+
+                        // moved to the next asset
+                        currentAssetAmount = actionTotal;
+                    }
+                }
+
+                decimal estimatedProfit = 0;
+                if (isInterrupted)
+                {
+                    estimatedProfit = 0;
+                }
+                else
+                {
+                    estimatedProfit = currentAssetAmount - actualStartAssetAmount;
+                }
+
+                solution.SimulationResult = new CirclePathSolutionItemSimlationResultModel()
+                {
+                    AvailableStartAssetAmount = startAssetAmount,
+                    TargetStartAssetAmount = decimal.Round(actualStartAssetAmount, 8),
+                    EstimatedProfitInStartAsset = decimal.Round(estimatedProfit, 8),
+                };
             }
 
             return solutions;

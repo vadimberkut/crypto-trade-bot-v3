@@ -12,6 +12,8 @@ namespace CryptoTradeBot.Host.Interfaces
     /// </summary>
     public interface IExchangeUtil
     {
+        string ExchangeName { get; }
+
         /// <summary>
         /// The one who places LIMIT order and it is filfilled by order placed by taker
         /// </summary>
@@ -35,14 +37,14 @@ namespace CryptoTradeBot.Host.Interfaces
         List<string> GetAssets();
 
         /// <summary>
-        /// Parses symbol to get base and quto assets
+        /// Parses symbol to get its info
         /// </summary>
-        ExchangeAssetModel ConvertSymbolToAssets(string symbol);
+        ExchangeSymbolModel GetSymbolInfo(string symbol);
 
         /// <summary>
-        /// Parses symbol to get base and quto assets
+        /// arses symbol to get its info
         /// </summary>
-        ExchangeAssetModel ConvertPairToAssets(string pair);
+        ExchangeSymbolModel GetSymbolInfoFromPair(string pair);
 
         /// <summary>
         /// Returns action based on symbol and asset according to if asset is base or quote.

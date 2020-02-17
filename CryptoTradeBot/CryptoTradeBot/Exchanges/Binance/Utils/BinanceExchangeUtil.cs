@@ -20,8 +20,6 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
 
         private HttpExchangeInformationResponseDto _exchangeInfo;
 
-        private const string _exchangeName = "Binance";
-
         public BinanceExchangeUtil(
             BinanceHttpClient binanceHttpClient
         )
@@ -33,8 +31,8 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             _exchangeInfo = _binanceHttpClient.ExchangeInformationAsync().GetAwaiter().GetResult();
         }
 
+        public string ExchangeName => "Binance";
         public decimal MakerFee => 0.001m;
-
         public decimal TakerFee => 0.001m;
 
         public List<string> GetSymbols()
@@ -51,26 +49,21 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             return assets;
         }
 
-        public ExchangeAssetModel ConvertPairToAssets(string pair)
+        public ExchangeSymbolModel GetSymbolInfoFromPair(string pair)
         {
-            return this.ConvertSymbolToAssets(pair);
+            return this.GetSymbolInfo(pair);
         }
 
-        public ExchangeAssetModel ConvertSymbolToAssets(string symbol)
+        public ExchangeSymbolModel GetSymbolInfo(string symbol)
         {
             var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol == symbol);
             if (symbolInfo == null)
             {
-                throw new Exception($"Can't find info for symbol '{symbol}' in '{_exchangeName}' exchange info.");
+                // throw new Exception($"Can't find info for symbol '{symbol}' in '{_exchangeName}' exchange info.");
+                return null;
             }
 
-            return new ExchangeAssetModel()
-            {
-                Symbol = symbolInfo.Symbol,
-                Pair = symbolInfo.Symbol,
-                Base = symbolInfo.BaseAsset,
-                Quote = symbolInfo.QuoteAsset,
-            };
+            return this._MapToModel(symbolInfo);
         }
 
         /// <summary>
@@ -82,7 +75,7 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol == symbol);
             if (symbolInfo == null)
             {
-                throw new Exception($"Can't find info for symbol '{symbol}' in '{_exchangeName}' exchange info.");
+                throw new Exception($"Can't find info for symbol '{symbol}' in '{ExchangeName}' exchange info.");
             }
 
             if(symbolInfo.BaseAsset == balanceAsset)
@@ -95,6 +88,18 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             }
 
             return SymbolAction.None;
+        }
+
+        private ExchangeSymbolModel _MapToModel(HttpExchangeInformationSymbolResponseDto dto)
+        {
+            return new ExchangeSymbolModel()
+            {
+                Symbol = dto.Symbol,
+                Pair = dto.Symbol,
+                Base = dto.BaseAsset,
+                Quote = dto.QuoteAsset,
+                QuotePrecision = dto.QuotePrecision,
+            };
         }
     }
 }
