@@ -70,10 +70,9 @@ namespace CryptoTradeBot.Simulation.Workers
 
             var orderBookStore = _serviceProvider.GetRequiredService<OrderBookStore>();
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
-            DateTime prevSnapshotAt = DateTime.MinValue;
+            DateTime? prevSnapshotAt = null;
             TimeSpan maxIntervalBetweenSnapshots = TimeSpan.FromSeconds((10 + 5));
             TimeSpan snapshotToSelectWindow = TimeSpan.FromSeconds(30);
-            bool isFirstSnapshot = true;
             TimeSpan simulationTime = TimeSpan.FromSeconds(0);
             List<CirclePathSolutionItemModel> bestSolutionsFroEachIteration = new List<CirclePathSolutionItemModel>();
             for (int i = 0; i < filePathes.Count; i += 1)
@@ -91,15 +90,14 @@ namespace CryptoTradeBot.Simulation.Workers
                 //    continue;
                 //}
 
-                var intervalBetweenSnapshots = currentSnapshotAt.Subtract(prevSnapshotAt);
-                if (intervalBetweenSnapshots > maxIntervalBetweenSnapshots && !isFirstSnapshot)
+                var intervalBetweenSnapshots = currentSnapshotAt.Subtract(prevSnapshotAt.GetValueOrDefault());
+                if (prevSnapshotAt == null || intervalBetweenSnapshots > maxIntervalBetweenSnapshots)
                 {
-                    isFirstSnapshot = false;
                     prevSnapshotAt = currentSnapshotAt;
                     continue;
                 }
 
-                simulationTime.Add(intervalBetweenSnapshots);
+                simulationTime = simulationTime.Add(intervalBetweenSnapshots);
 
                 // setup store from snaphot
                 string fileContent = File.ReadAllText(filePath);
@@ -123,7 +121,6 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 _logger.LogInformation($"----------Processed ({i + 1}/{filePathes.Count}) '{fileName}'.");
 
-                isFirstSnapshot = false;
                 prevSnapshotAt = currentSnapshotAt;
             }
 
