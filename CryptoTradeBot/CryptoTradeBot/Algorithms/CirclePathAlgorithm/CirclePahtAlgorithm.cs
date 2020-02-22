@@ -3,7 +3,9 @@ using CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm.Models;
 using CryptoTradeBot.Host.Interfaces;
 using CryptoTradeBot.Host.Models;
 using CryptoTradeBot.Infrastructure.Enums;
+using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm;
 using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm.Models;
+using CryptoTradeBot.WebHost.Exchanges.Binance;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
@@ -41,14 +43,22 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             _orderBookStore = orderBookStore;
             _exchangeUtil = exchangeUtil;
 
-            // TODO: use only high volume symbols
-            _symbols = exchangeUtil.GetSymbols();
-            _states = exchangeUtil.GetAssets();
+            _symbols = exchangeUtil.GetSymbols(CirclePahtAlgorithmConfig.AllowedSymbols);
+            _states = exchangeUtil.GetAssets(CirclePahtAlgorithmConfig.AllowedSymbols);
 
-            // TODO: add avanced validation
-            _minPathLenght = Math.Max(_minPathLenght, _minAllowedPathLenght);
-            _maxPathLength = Math.Min(_maxPathLength, _maxAllowedPathLength);
-            _minPathProfitPercent = Math.Max(_minPathProfitPercent, _minAllowedPathProfitPercent);
+            // validation
+            if (!(_minPathLenght >= _minAllowedPathLenght && _minPathLenght <= _maxAllowedPathLength))
+            {
+                throw new InvalidOperationException($"_minPathLenght must be in [{_minAllowedPathLenght};{_maxAllowedPathLength}].");
+            }
+            if (!(_maxPathLength >= _minAllowedPathLenght && _maxPathLength <= _maxAllowedPathLength))
+            {
+                throw new InvalidOperationException($"_maxPathLength must be in [{_minAllowedPathLenght};{_maxAllowedPathLength}].");
+            }
+            if (!(_minPathProfitPercent >= _minAllowedPathProfitPercent))
+            {
+                throw new InvalidOperationException($"_minPathProfitPercent must be greater than {_minAllowedPathProfitPercent}.");
+            }
 
             this._BuildGraph();
         }
@@ -103,29 +113,30 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 
             // get solutions
             var solutions = this._ProcessPathListAndGetSolution(pathList, startAssetAmount);
+            List<CirclePathSolutionItemModel> profitSolutions = new List<CirclePathSolutionItemModel>();
 
             ////// simulate solutions
-            
-            //// simulate with MARKET orders
-            solutions = this._SimulateSolutionsWithMarketOrders(solutions, startAssetAmount);
 
-            // filter out unprofitable solutions
-            var profitSolutions = solutions.Where(solution =>
-            {
-                return 
-                    solution.SimulationResult.EstimatedProfitInStartAsset > 0 && 
-                    solution.SimulationResult.EstimatedProfitInStartAsset >= 
-                        solution.SimulationResult.TargetStartAssetAmount * this._minPathProfitPercent;
-            }).ToList();
+            ////// simulate with MARKET orders
+            //solutions = this._SimulateSolutionsWithMarketOrders(solutions, startAsset, startAssetAmount);
 
-            //this._logger.LogInformation($"");
-            //this._logger.LogInformation($"Result for MARKET orders:");
-            //this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
-            //this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
-            //this._logger.LogInformation($"");
+            //// filter out unprofitable solutions
+            //profitSolutions = solutions.Where(solution =>
+            //{
+            //    return 
+            //        solution.SimulationResult.EstimatedProfitInStartAsset > 0 && 
+            //        solution.SimulationResult.EstimatedProfitInStartAsset >= 
+            //            solution.SimulationResult.TargetStartAssetAmount * this._minPathProfitPercent;
+            //}).ToList();
 
-            //// simulate with LIMIT orders
-            solutions = this._SimulateSolutionsWithLimitOrders(solutions, startAssetAmount);
+            ////this._logger.LogInformation($"");
+            ////this._logger.LogInformation($"Result for MARKET orders:");
+            ////this._logger.LogInformation($"Input: startAsset={startAsset}, startAssetAmount={startAssetAmount}.");
+            ////this._logger.LogInformation($"Output: solutions={solutions.Count}, profitSolutions={profitSolutions.Count}.");
+            ////this._logger.LogInformation($"");
+
+            ////// simulate with LIMIT orders
+            solutions = this._SimulateSolutionsWithLimitOrders(solutions, startAsset, startAssetAmount);
 
             // filter out unprofitable solutions
             profitSolutions = solutions.Where(solution =>
@@ -477,7 +488,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             return solutions;
         }
 
-        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithMarketOrders(List<CirclePathSolutionItemModel> solutions, decimal startAssetAmount)
+        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithMarketOrders(List<CirclePathSolutionItemModel> solutions, string startAsset, decimal startAssetAmount)
         {
             foreach (var solution in solutions)
             {
@@ -524,10 +535,24 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     {
                         if (pathInstruction.Action == SymbolAction.Buy)
                         {
+                            // E.g. 
+                            // state1 = BTC, amount = 0.1, action = BUY
+                            // state2 = ETH, best_ask_price = 0.03, best_ask_amount = 3, best_total = 0.9
+                            // wantToBuyAmount = 0.1 BTC / 0.03 = 3.33 ETH
+                            // canToBuyAmount = best_ask_amount = 3
+                            // wantToBuyAmountInQuote = 3.33 ETH * 0.03 = 0.1 BTC
+                            // canToBuyAmountInQuote = 3 ETH * 0.03 = 0.09 BTC
+                            // actualStartAssetAmount = min(0.1 BTC, 0.09 BTC) = 0.09 BTC
+
                             // adjust amout to according to order book best values
                             decimal wantToBuyAmount = currentAssetAmount / bestAsk.Price; // according to wallet
                             decimal canToBuyAmount = bestAsk.Quantity; // according to order book
-                            actualStartAssetAmount = Math.Min(wantToBuyAmount, canToBuyAmount);
+
+                            // convert back to quote
+                            decimal wantToBuyAmountInQuote = wantToBuyAmount * bestAsk.Price;
+                            decimal canToBuyAmountInQuote = bestAsk.Quantity * bestAsk.Price;
+
+                            actualStartAssetAmount = Math.Min(wantToBuyAmountInQuote, canToBuyAmountInQuote);
                             currentAssetAmount = actualStartAssetAmount;
                         }
                         else if (pathInstruction.Action == SymbolAction.Sell)
@@ -574,13 +599,14 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     AvailableStartAssetAmount = startAssetAmount,
                     TargetStartAssetAmount = decimal.Round(actualStartAssetAmount, 8),
                     EstimatedProfitInStartAsset = decimal.Round(estimatedProfit, 8),
+                    EstimatedProfitInUSDTAsset = decimal.Round(_orderBookStore.ConvertAssets(startAsset, BinanceConfig.USDTAsset, decimal.Round(estimatedProfit, 8)), 2),
                 };
             }
 
             return solutions;
         }
 
-        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithLimitOrders(List<CirclePathSolutionItemModel> solutions, decimal startAssetAmount)
+        private List<CirclePathSolutionItemModel> _SimulateSolutionsWithLimitOrders(List<CirclePathSolutionItemModel> solutions, string startAsset, decimal startAssetAmount)
         {
             foreach (var solution in solutions)
             {
@@ -641,10 +667,24 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     {
                         if (pathInstruction.Action == SymbolAction.Buy)
                         {
+                            // E.g. 
+                            // state1 = BTC, amount = 0.1, action = BUY
+                            // state2 = ETH, best_ask_price = 0.03, best_ask_amount = 3, best_total = 0.9
+                            // wantToBuyAmount = 0.1 BTC / 0.03 = 3.33 ETH
+                            // canToBuyAmount = best_ask_amount = 3
+                            // wantToBuyAmountInQuote = 3.33 ETH * 0.03 = 0.1 BTC
+                            // canToBuyAmountInQuote = 3 ETH * 0.03 = 0.09 BTC
+                            // actualStartAssetAmount = min(0.1 BTC, 0.09 BTC) = 0.09 BTC
+
                             // adjust amount according to opposite order book top orders amount
                             decimal wantToBuyAmount = currentAssetAmount / targetBestBidPrice; // according to wallet
                             decimal canToBuyAmount = bestAsk.Quantity; // according to order book
-                            actualStartAssetAmount = Math.Min(wantToBuyAmount, canToBuyAmount);
+
+                            // convert back to quote
+                            decimal wantToBuyAmountInQuote = wantToBuyAmount * targetBestBidPrice;
+                            decimal canToBuyAmountInQuote = bestAsk.Quantity * targetBestBidPrice;
+
+                            actualStartAssetAmount = Math.Min(wantToBuyAmountInQuote, canToBuyAmountInQuote);
                             currentAssetAmount = actualStartAssetAmount;
                         }
                         else if (pathInstruction.Action == SymbolAction.Sell)
@@ -661,7 +701,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     if (pathInstruction.Action == SymbolAction.Buy)
                     {
                         actionTotal = currentAssetAmount / targetBestBidPrice;
-                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.TakerFee); // taker because you are the taker (LIMIT order)
 
                         // moved to the next asset
                         currentAssetAmount = actionTotal;
@@ -669,7 +709,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     else if (pathInstruction.Action == SymbolAction.Sell)
                     {
                         actionTotal = currentAssetAmount * targetBestAskPrice;
-                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.MakerFee); // maker because you are the maker (MARKET order)
+                        actionTotal = actionTotal - (actionTotal * this._exchangeUtil.TakerFee); // taker because you are the taker (LIMIT order)
 
                         // moved to the next asset
                         currentAssetAmount = actionTotal;
@@ -691,6 +731,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     AvailableStartAssetAmount = startAssetAmount,
                     TargetStartAssetAmount = decimal.Round(actualStartAssetAmount, 8),
                     EstimatedProfitInStartAsset = decimal.Round(estimatedProfit, 8),
+                    EstimatedProfitInUSDTAsset = decimal.Round(_orderBookStore.ConvertAssets(startAsset, BinanceConfig.USDTAsset, decimal.Round(estimatedProfit, 8)), 2),
                 };
             }
 

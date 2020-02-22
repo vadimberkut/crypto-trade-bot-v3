@@ -42,10 +42,42 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
             return symbols;
         }
 
+        public List<string> GetSymbols(IEnumerable<string> requestedSymbols)
+        {
+            var symbolInfos = this._exchangeInfo.Symbols.ToList();
+            var symbols = symbolInfos.Select(x => x.Symbol).Distinct().ToList();
+            var resultSymbols = symbols.Intersect(requestedSymbols).ToList();
+            return resultSymbols;
+        }
+
+        public List<string> GetSymbolsForAssets(string asset1, string asset2)
+        {
+            var symbolInfos = this._exchangeInfo.Symbols.ToList();
+            var symbols = symbolInfos.Where(x => 
+                (x.BaseAsset == asset1 && x.QuoteAsset == asset2) ||
+                (x.BaseAsset == asset2 && x.QuoteAsset == asset1)
+            )
+                .Select(x => x.Symbol)
+                .Distinct()
+                .ToList();
+            return symbols;
+        }
+
         public List<string> GetAssets()
         {
             var symbolInfos = this._exchangeInfo.Symbols.ToList();
             var assets = symbolInfos.Select(x => new[] { x.BaseAsset, x.QuoteAsset }).SelectMany(x => x).Distinct().ToList();
+            return assets;
+        }
+
+        public List<string> GetAssets(IEnumerable<string> requestedSymbols)
+        {
+            var symbolInfos = this._exchangeInfo.Symbols.ToList();
+            var assets = symbolInfos
+                .Where(x => requestedSymbols.Contains(x.Symbol))
+                .Select(x => new[] { x.BaseAsset, x.QuoteAsset })
+                .SelectMany(x => x).Distinct()
+                .ToList();
             return assets;
         }
 
@@ -56,7 +88,7 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
 
         public ExchangeSymbolModel GetSymbolInfo(string symbol)
         {
-            var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol == symbol);
+            var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol.ToLowerInvariant() == symbol.ToLowerInvariant());
             if (symbolInfo == null)
             {
                 // throw new Exception($"Can't find info for symbol '{symbol}' in '{_exchangeName}' exchange info.");
@@ -72,7 +104,7 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Utils
         /// </summary>
         public SymbolAction GetSymbolAction(string symbol, string balanceAsset)
         {
-            var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol == symbol);
+            var symbolInfo = this._exchangeInfo.Symbols.FirstOrDefault(x => x.Symbol.ToLowerInvariant() == symbol.ToLowerInvariant());
             if (symbolInfo == null)
             {
                 throw new Exception($"Can't find info for symbol '{symbol}' in '{ExchangeName}' exchange info.");

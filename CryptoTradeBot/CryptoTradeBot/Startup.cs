@@ -59,7 +59,7 @@ namespace CryptoTradeBot
                     sp.GetService<IOptions<ApplicationSettings>>().Value.Binance
                 );
             });
-            services.AddTransient<BinanceExchangeUtil>();
+            services.AddSingleton<BinanceExchangeUtil>();
             services.AddTransient<WssBookDepthHandler>();
             services.AddSingleton<OrderBookStore>();
 

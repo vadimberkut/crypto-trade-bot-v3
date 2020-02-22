@@ -71,6 +71,7 @@ namespace CryptoTradeBot.Simulation.Workers
             var orderBookStore = _serviceProvider.GetRequiredService<OrderBookStore>();
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
             DateTime? prevSnapshotAt = null;
+            DateTime? nextSnapshotAt = null;
             TimeSpan maxIntervalBetweenSnapshots = TimeSpan.FromSeconds((10 + 5));
             TimeSpan snapshotToSelectWindow = TimeSpan.FromSeconds(30);
             TimeSpan simulationTime = TimeSpan.FromSeconds(0);
@@ -104,8 +105,10 @@ namespace CryptoTradeBot.Simulation.Workers
                 orderBookStore.ImportFromJson(fileContent);
 
                 // run algorith
-                string startAsset = "IOTA";
-                decimal startAssetAmount = 1000;
+                //string startAsset = "IOTA";
+                //decimal startAssetAmount = 1000;
+                string startAsset = "BTC";
+                decimal startAssetAmount = 0.1m;
                 var solutions = circlePathAlgorithm.Solve(startAsset, startAssetAmount);
 
                 if(solutions.Count != 0)
@@ -115,7 +118,7 @@ namespace CryptoTradeBot.Simulation.Workers
                     
                     foreach (var solution in solutions)
                     {
-                        _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}.");
+                        _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}, profit USDT={solution.SimulationResult.EstimatedProfitInUSDTAsset}.");
                     }
                 }
 
@@ -168,13 +171,14 @@ namespace CryptoTradeBot.Simulation.Workers
             _logger.LogInformation($"Solution list:");
             foreach (var solution in uniqueBestSolutionsFroEachIteration)
             {
-                _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}, pathId={solution.PathId}.");
+                _logger.LogInformation($"Solution: amount={solution.SimulationResult.TargetStartAssetAmount}, profit={solution.SimulationResult.EstimatedProfitInStartAsset}, profit USDT={solution.SimulationResult.EstimatedProfitInUSDTAsset}, pathId={solution.PathId}.");
             }
 
             // calc total profit
-            var totalEstimatedProfit = uniqueBestSolutionsFroEachIteration.Aggregate<CirclePathSolutionItemModel, decimal>(0, (accum, curr) => accum + curr.SimulationResult.EstimatedProfitInStartAsset);
+            decimal totalEstimatedProfit = uniqueBestSolutionsFroEachIteration.Aggregate<CirclePathSolutionItemModel, decimal>(0, (accum, curr) => accum + curr.SimulationResult.EstimatedProfitInStartAsset);
+            decimal totalEstimatedProfitUsdt = uniqueBestSolutionsFroEachIteration.Aggregate<CirclePathSolutionItemModel, decimal>(0, (accum, curr) => accum + curr.SimulationResult.EstimatedProfitInUSDTAsset);
             _logger.LogInformation($"");
-            _logger.LogInformation($"Solution total: profit={totalEstimatedProfit}.");
+            _logger.LogInformation($"Solution total: profit={totalEstimatedProfit}, profit USDT={totalEstimatedProfitUsdt}.");
         }
 
         public Task StopAsync(CancellationToken cancellationToken)

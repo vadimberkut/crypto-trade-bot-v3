@@ -19,6 +19,7 @@ using System.IO;
 using CryptoTradeBot.Exchanges.Binance.Stores;
 using System.Diagnostics;
 using CryptoTradeBot.Host.Exchanges.Binance.Clients;
+using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm;
 
 namespace CryptoTradeBot.WorkerServices
 {
@@ -59,127 +60,7 @@ namespace CryptoTradeBot.WorkerServices
             exchangeInfo.Symbols = exchangeInfo.Symbols.Where(x => x.Status == "TRADING").ToList();
 
             int depth = 20; // 5, 10 ,20
-            var bookStreams = new List<string>()
-            {
-                // BTC
-                $"ethbtc@depth{depth}",
-                $"xrpbtc@depth{depth}",
-                $"hbarbtc@depth{depth}",
-                $"bnbbtc@depth{depth}",
-                $"ltcbtc@depth{depth}",
-                $"chzbtc@depth{depth}",
-                $"wrxbtc@depth{depth}",
-                $"etcbtc@depth{depth}",
-                $"xtzbtc@depth{depth}",
-                $"trxbtc@depth{depth}",
-                $"eosbtc@depth{depth}",
-                $"adabtc@depth{depth}",
-                $"neobtc@depth{depth}",
-                $"bchbtc@depth{depth}",
-                $"xlmbtc@depth{depth}",
-                $"xmrbtc@depth{depth}",
-                $"iotabtc@depth{depth}",
-                $"dashbtc@depth{depth}",
-
-                // USDT
-                $"btcusdt@depth{depth}",
-                $"ethusdt@depth{depth}",
-                $"xrpusdt@depth{depth}",
-                $"bnbusdt@depth{depth}",
-                $"ltcusdt@depth{depth}",
-                $"bchusdt@depth{depth}",
-                $"etcusdt@depth{depth}",
-                $"eosusdt@depth{depth}",
-                $"trxusdt@depth{depth}",
-                $"hbarusdt@depth{depth}",
-                $"adausdt@depth{depth}",
-                $"xlmusdt@depth{depth}",
-                $"xtzusdt@depth{depth}",
-                $"neousdt@depth{depth}",
-                $"dashusdt@depth{depth}",
-                $"iotausdt@depth{depth}",
-                $"xmrusdt@depth{depth}",
-
-                // BNB
-                $"fttbnb@depth{depth}",
-                $"xrpbnb@depth{depth}",
-                $"hbarbnb@depth{depth}",
-                $"trxbnb@depth{depth}",
-                $"xtzbnb@depth{depth}",
-                $"chzbnb@depth{depth}",
-                $"ltcbnb@depth{depth}",
-                $"eosbnb@depth{depth}",
-                $"adabnb@depth{depth}",
-                $"bchbnb@depth{depth}",
-                $"etcbnb@depth{depth}",
-                $"iotabnb@depth{depth}",
-                $"xlmbnb@depth{depth}",
-                $"neobnb@depth{depth}",
-                $"dashbnb@depth{depth}",
-                $"xmrbnb@depth{depth}",
-                $"lskbnb@depth{depth}",
-
-                // BUSD
-                $"btcbusd@depth{depth}",
-                $"xrpbusd@depth{depth}",
-                $"ethbusd@depth{depth}",
-                $"bnbbusd@depth{depth}",
-                $"ltcbusd@depth{depth}",
-                $"trxbusd@depth{depth}",
-                $"xlmbusd@depth{depth}",
-                $"bchbusd@depth{depth}",
-                $"eosbusd@depth{depth}",
-                $"adabusd@depth{depth}",
-                $"xtzbusd@depth{depth}",
-                $"etcbusd@depth{depth}",
-                $"neobusd@depth{depth}",
-                $"dashbusd@depth{depth}",
-
-                // TUSD
-                $"btctusd@depth{depth}",
-                $"ethtusd@depth{depth}",
-                $"bchtusd@depth{depth}",
-                $"xrptusd@depth{depth}",
-                $"ltctusd@depth{depth}",
-                $"xlmtusd@depth{depth}",
-                $"trxtusd@depth{depth}",
-                $"neotusd@depth{depth}",
-                $"adatusd@depth{depth}",
-                $"eostusd@depth{depth}",
-                $"bnbtusd@depth{depth}",
-                $"usdctusd@depth{depth}",
-
-                // USDC
-                $"btcusdc@depth{depth}",
-                $"ethusdc@depth{depth}",
-                $"xrpusdc@depth{depth}",
-                $"ltcusdc@depth{depth}",
-                $"bchusdc@depth{depth}",
-                $"trxusdc@depth{depth}",
-                $"bnbusdc@depth{depth}",
-                $"eosusdc@depth{depth}",
-                $"neousdc@depth{depth}",
-                $"adausdc@depth{depth}",
-
-                // ETH
-                $"bnbeth@depth{depth}",
-                $"xrpeth@depth{depth}",
-                $"eoseth@depth{depth}",
-                $"trxeth@depth{depth}",
-                $"adaeth@depth{depth}",
-                $"ltceth@depth{depth}",
-                $"etceth@depth{depth}",
-                $"xlmeth@depth{depth}",
-                $"neoeth@depth{depth}",
-                $"iotaeth@depth{depth}",
-                $"xmreth@depth{depth}",
-                $"dasheth@depth{depth}",
-
-                // TRX
-
-                // XRP
-                 $"trxxrp@depth{depth}",
-            };
+            var bookStreams = CirclePahtAlgorithmConfig.AllowedSymbols.Select(symbol => $"{symbol.ToLowerInvariant()}@depth{depth}").ToList();
 
             var wssStreamMessageHandleManager = new WssStreamMessageHandleManager();
             foreach (var stream in bookStreams)

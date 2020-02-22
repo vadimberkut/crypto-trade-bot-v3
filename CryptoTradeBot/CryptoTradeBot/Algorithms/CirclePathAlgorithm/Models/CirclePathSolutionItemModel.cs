@@ -22,6 +22,7 @@ namespace CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm.Models
     public class CirclePathSolutionItemSimlationResultModel
     {
         public decimal EstimatedProfitInStartAsset { get; set; }
+        public decimal EstimatedProfitInUSDTAsset { get; set; }
         public decimal AvailableStartAssetAmount { get; set; }
         public decimal TargetStartAssetAmount { get; set; }
     }

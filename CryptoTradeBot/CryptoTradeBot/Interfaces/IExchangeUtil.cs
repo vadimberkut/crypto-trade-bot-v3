@@ -30,11 +30,17 @@ namespace CryptoTradeBot.Host.Interfaces
         /// <returns></returns>
         List<string> GetSymbols();
 
+        List<string> GetSymbols(IEnumerable<string> requestedSymbols);
+
+        List<string> GetSymbolsForAssets(string asset1, string asset2);
+
         /// <summary>
         /// Returns available or selected assets for exchange.
         /// </summary>
         /// <returns></returns>
         List<string> GetAssets();
+
+        public List<string> GetAssets(IEnumerable<string> requestedSymbols);
 
         /// <summary>
         /// Parses symbol to get its info
