@@ -24,6 +24,10 @@ namespace CryptoTradeBot.Exchanges.Binance.Handlers
             _orderBookStore = orderBookStore;
         }
 
+        /// <summary>
+        /// Handles messages for '<symbol>@depth<depth>' suscription
+        /// </summary>
+        /// <returns></returns>
         public async Task HandleMessageAsync(string stream, string message)
         {
             var messageObject = JsonConvert.DeserializeObject<WssCombinedStreamPayloadDto<WssPartialBookDepthDto>>(message);

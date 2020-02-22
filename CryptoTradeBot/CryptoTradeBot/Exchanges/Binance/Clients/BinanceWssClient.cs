@@ -13,6 +13,7 @@ using Websocket.Client;
 using System.Reactive.Linq;
 using System.Reactive.Concurrency;
 using CryptoTradeBot.Infrastructure.AplicationSettings;
+using CryptoTradeBot.WebHost.Exchanges.Binance.Dtos;
 
 namespace CryptoTradeBot.Exchanges.Binance
 {
@@ -70,8 +71,10 @@ namespace CryptoTradeBot.Exchanges.Binance
 
                     if (msg.MessageType == WebSocketMessageType.Text)
                     {
+                        // handle command and error messages
                         this.InternalHandleMessage(msg.Text);
 
+                        // handle stream subscriptions
                         if(_wssStreamMessageHandleManager != null)
                         {
                             await _wssStreamMessageHandleManager.HandleStreamMessageAsync(msg.Text);
@@ -190,6 +193,7 @@ namespace CryptoTradeBot.Exchanges.Binance
 
         private void InternalHandleMessage(string message)
         {
+            // handle 'response' message type
             var dto = JsonConvert.DeserializeObject<WssBaseResponseMessageDto>(message);
             if(dto != null && dto.Id != 0)
             {
@@ -200,6 +204,14 @@ namespace CryptoTradeBot.Exchanges.Binance
                     // remove from pending
                     _pendingAcknowledgements.Remove(dto.Id);
                 }
+            }
+
+            // handle 'error' message type
+            // only validation errors are sent, it's ok to log only
+            var errorDto = JsonConvert.DeserializeObject<WssBaseErrorResponseMessageDto>(message);
+            if (errorDto != null && !String.IsNullOrEmpty(errorDto.Msg))
+            {
+                _logger.LogError($"Error received: code={errorDto.Code}, msg={errorDto.Msg}");
             }
         }
 

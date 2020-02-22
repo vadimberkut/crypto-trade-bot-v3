@@ -13,7 +13,7 @@ namespace CryptoTradeBot.Exchanges.Binance.Dtos
      */
 
     /// <summary>
-    /// Response for command messages (subscribe, unsubscribe, set properties 
+    /// Response for command messages (subscribe, unsubscribe, set properties)
     /// </summary>
     public class WssBaseResponseMessageDto
     {
