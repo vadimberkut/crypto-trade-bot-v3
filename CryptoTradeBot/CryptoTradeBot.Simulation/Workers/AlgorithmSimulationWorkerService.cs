@@ -71,9 +71,9 @@ namespace CryptoTradeBot.Simulation.Workers
             var orderBookStore = _serviceProvider.GetRequiredService<OrderBookStore>();
             var filePathes = Directory.GetFiles(orderBookSaveDirPath).OrderBy(x => x).ToList();
             DateTime? prevSnapshotAt = null;
-            DateTime? nextSnapshotAt = null;
+            DateTime? nextSnapshotMustBeAt = null;
             TimeSpan maxIntervalBetweenSnapshots = TimeSpan.FromSeconds((10 + 5));
-            TimeSpan snapshotToSelectWindow = TimeSpan.FromSeconds(30);
+            TimeSpan snapshotToSelectWindow = TimeSpan.FromSeconds(60);
             TimeSpan simulationTime = TimeSpan.FromSeconds(0);
             List<CirclePathSolutionItemModel> bestSolutionsFroEachIteration = new List<CirclePathSolutionItemModel>();
             for (int i = 0; i < filePathes.Count; i += 1)
@@ -86,10 +86,13 @@ namespace CryptoTradeBot.Simulation.Workers
                 DateTime currentSnapshotAt = DateTime.ParseExact(fileName, "yyyyMMdd'T'HHmmss'.'fff'Z'", null);
                 DateTime.SpecifyKind(currentSnapshotAt, DateTimeKind.Utc);
 
-                //if (intervalBetweenSnapshots < snapshotToSelectWindow)
-                //{
-                //    continue;
-                //}
+                // throttle
+                nextSnapshotMustBeAt = nextSnapshotMustBeAt ?? DateTime.MinValue;
+                if (currentSnapshotAt < nextSnapshotMustBeAt)
+                {
+                    prevSnapshotAt = currentSnapshotAt;
+                    continue;
+                }
 
                 var intervalBetweenSnapshots = currentSnapshotAt.Subtract(prevSnapshotAt.GetValueOrDefault());
                 if (prevSnapshotAt == null || intervalBetweenSnapshots > maxIntervalBetweenSnapshots)
@@ -125,6 +128,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 _logger.LogInformation($"----------Processed ({i + 1}/{filePathes.Count}) '{fileName}'.");
 
                 prevSnapshotAt = currentSnapshotAt;
+                nextSnapshotMustBeAt = currentSnapshotAt.Add(snapshotToSelectWindow);
             }
 
             // take only uniq results - filter out repeatable
