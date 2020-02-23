@@ -62,10 +62,11 @@ namespace CryptoTradeBot.WorkerServices
             int depth = 20; // 5, 10 ,20
             var bookStreams = CirclePahtAlgorithmConfig.AllowedSymbols.Select(symbol => $"{symbol.ToLowerInvariant()}@depth{depth}").ToList();
 
+            // use separate handler instance for each stream
             var wssStreamMessageHandleManager = new WssStreamMessageHandleManager();
             foreach (var stream in bookStreams)
             {
-                wssStreamMessageHandleManager.RegisterStreamHandler(stream, _serviceProvider.GetService<WssBookDepthHandler>());
+                wssStreamMessageHandleManager.RegisterStreamHandler(stream, _serviceProvider.GetRequiredService<WssBookDepthHandler>());
             }
 
             _binanceWssClient.SetWssStreamMessageHandleManager(wssStreamMessageHandleManager);

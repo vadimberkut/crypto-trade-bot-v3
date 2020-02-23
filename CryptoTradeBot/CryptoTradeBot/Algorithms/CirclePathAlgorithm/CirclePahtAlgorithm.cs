@@ -18,11 +18,11 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
     public class CirclePahtAlgorithm
     {
         private readonly ILogger<CirclePahtAlgorithm> _logger;
-        private readonly OrderBookStore _orderBookStore;
-        private readonly IExchangeUtil _exchangeUtil;
+        private readonly OrderBookStore _orderBookStore; // TODO: pass as param each time
+        private readonly IExchangeUtil _exchangeUtil; // TODO: pass as param each time
 
-        private readonly List<string> _symbols;
-        private List<string> _states;
+        private readonly List<string> _symbols; // TODO: pass as param each time
+        private List<string> _states; // TODO: pass as param each time
         private List<StateTransitionModel> _stateTransitions;
 
         private const int _minAllowedPathLenght = 3; // 2 is meaningless, so use 3. E.g. of 2: IOTA -> USDT -> IOTA

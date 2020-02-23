@@ -11,6 +11,7 @@ using System.Threading.Tasks;
 
 namespace CryptoTradeBot.Host.Exchanges.Binance.Clients
 {
+    // TODO: handle rate limited
     public class BinanceHttpClient
     {
         private readonly ILogger<BinanceHttpClient> _logger;

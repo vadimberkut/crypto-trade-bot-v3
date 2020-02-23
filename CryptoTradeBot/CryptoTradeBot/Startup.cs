@@ -6,6 +6,7 @@ using Autofac;
 using CryptoTradeBot.Exchanges.Binance;
 using CryptoTradeBot.Exchanges.Binance.Handlers;
 using CryptoTradeBot.Exchanges.Binance.Stores;
+using CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm;
 using CryptoTradeBot.Host.Exchanges.Binance.Clients;
 using CryptoTradeBot.Host.Exchanges.Binance.Utils;
 using CryptoTradeBot.Infrastructure.Utils;
@@ -62,6 +63,9 @@ namespace CryptoTradeBot
             services.AddSingleton<BinanceExchangeUtil>();
             services.AddTransient<WssBookDepthHandler>();
             services.AddSingleton<OrderBookStore>();
+
+            // algs
+            services.AddTransient<CirclePahtAlgorithm>();
 
             services.AddControllers();
         }
