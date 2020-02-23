@@ -488,6 +488,7 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
             return solutions;
         }
 
+        [Obsolete("Not consistent with LIMIT order simulation")]
         private List<CirclePathSolutionItemModel> _SimulateSolutionsWithMarketOrders(List<CirclePathSolutionItemModel> solutions, string startAsset, decimal startAssetAmount)
         {
             foreach (var solution in solutions)
@@ -610,14 +611,72 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
         {
             foreach (var solution in solutions)
             {
-                // simulate path instructions and estimate profit
-                // 1. use MARKET orders
-                // 2. use LIMIT orders
+                // pinpoint the optimized start amount, so we get the first and the best price orders in the book and not oversell/overbuy
+                // TODO: do estimation based on volume for recent period too. due to too large start amount that can lead to losses at the last transitions. As some markets can not be liquid.
+                var estimatedAmounts = solution.Instructions.Select(pathInstruction =>
+                {
+                    // if reached the end - exit
+                    if (pathInstruction.IsEnd)
+                    {
+                        return null;
+                    }
 
-                // TODO: figure out how to pinpoint the optimized start amount, so we get the first, the best orders in the book and not oversell/overbuy
-                // TODO: due to too large start amount that can lead to losses at the last transitions. As some markets can not be liquid.
-                decimal actualStartAssetAmount = startAssetAmount;
-                decimal currentAssetAmount = startAssetAmount;
+                    try
+                    {
+
+                        // buy - place buy LIMIT order, but estimated based on opposite asks
+                        // sell - place sell LIMIT order, but estimated based on opposite bids
+                        var symbolInfo = this._exchangeUtil.GetSymbolInfo(pathInstruction.Transition.Symbol);
+                        var symbolOrderBook = this._orderBookStore.GetOrderBookForSymbol(pathInstruction.Transition.Symbol);
+                        const decimal maxPriceDeviationPercentFromTheBestOrder = 0.002m;
+                        var bestBid = symbolOrderBook.AggregateTopBestBidsByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, maxTotalAmount: decimal.MaxValue);
+                        var bestAsk = symbolOrderBook.AggregateTopBestAsksByPredicate(5, maxPriceDeviationPercentFromTheBestOrder, maxTotalAmount: decimal.MaxValue);
+
+                        // note: quatities are always specified in Base asset
+                        if (pathInstruction.Action == SymbolAction.Buy)
+                        {
+                            decimal quantity = bestAsk.Quantity;
+                            var result = new
+                            {
+                                Symbol = pathInstruction.Transition.Symbol,
+                                EtimatedTotalInStartAsset = _orderBookStore.ConvertAssets(symbolInfo.Base, startAsset, quantity),
+                                EtimatedTotalInUsdt = _orderBookStore.ConvertAssets(symbolInfo.Base, BinanceConfig.USDTAsset, quantity),
+                            };
+                            return result;
+                        }
+                        else if (pathInstruction.Action == SymbolAction.Sell)
+                        {
+                            decimal quantity = bestBid.Quantity;
+                            var result = new
+                            {
+                                Symbol = pathInstruction.Transition.Symbol,
+                                EtimatedTotalInStartAsset = _orderBookStore.ConvertAssets(symbolInfo.Base, startAsset, quantity),
+                                EtimatedTotalInUsdt = _orderBookStore.ConvertAssets(symbolInfo.Base, BinanceConfig.USDTAsset, quantity),
+                            };
+                            return result;
+                        }
+                        else
+                        {
+                            return null;
+                        }
+                    }
+                    catch(Exception ex)
+                    {
+                        _logger.LogError(ex, ex.Message);
+                        return null;
+                    }
+                })
+                    .Where(x => x != null)
+                    .ToList();
+
+                // TODO: add check for min aloowed order size on exchange
+                const decimal estimateTakePercent = 0.5m;
+                decimal optimalStartAssetAmount = estimatedAmounts.Min(x => x.EtimatedTotalInStartAsset);
+                optimalStartAssetAmount = optimalStartAssetAmount * estimateTakePercent;
+                decimal actualStartAssetAmount = Math.Min(startAssetAmount, optimalStartAssetAmount);
+
+                // simulate path instructions and estimate profit
+                decimal currentAssetAmount = actualStartAssetAmount;
                 bool isInterrupted = false;
                 foreach (var pathInstruction in solution.Instructions)
                 {
@@ -662,40 +721,41 @@ namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
                     decimal targetBestBidPrice = bestBid.Price + minSymbolPriceChangeValue;
                     decimal targetBestAskPrice = bestAsk.Price - minSymbolPriceChangeValue;
 
-                    // detrmine the best start amount
-                    if (pathInstruction.IsStart)
-                    {
-                        if (pathInstruction.Action == SymbolAction.Buy)
-                        {
-                            // E.g. 
-                            // state1 = BTC, amount = 0.1, action = BUY
-                            // state2 = ETH, best_ask_price = 0.03, best_ask_amount = 3, best_total = 0.9
-                            // wantToBuyAmount = 0.1 BTC / 0.03 = 3.33 ETH
-                            // canToBuyAmount = best_ask_amount = 3
-                            // wantToBuyAmountInQuote = 3.33 ETH * 0.03 = 0.1 BTC
-                            // canToBuyAmountInQuote = 3 ETH * 0.03 = 0.09 BTC
-                            // actualStartAssetAmount = min(0.1 BTC, 0.09 BTC) = 0.09 BTC
+                    //// OSOLETE. Estimated above. Leave just as for example.
+                    //// detrmine the best start amount
+                    //if (pathInstruction.IsStart)
+                    //{
+                    //    if (pathInstruction.Action == SymbolAction.Buy)
+                    //    {
+                    //        // E.g. 
+                    //        // state1 = BTC, amount = 0.1, action = BUY
+                    //        // state2 = ETH, best_ask_price = 0.03, best_ask_amount = 3, best_total = 0.9
+                    //        // wantToBuyAmount = 0.1 BTC / 0.03 = 3.33 ETH
+                    //        // canToBuyAmount = best_ask_amount = 3
+                    //        // wantToBuyAmountInQuote = 3.33 ETH * 0.03 = 0.1 BTC
+                    //        // canToBuyAmountInQuote = 3 ETH * 0.03 = 0.09 BTC
+                    //        // actualStartAssetAmount = min(0.1 BTC, 0.09 BTC) = 0.09 BTC
 
-                            // adjust amount according to opposite order book top orders amount
-                            decimal wantToBuyAmount = currentAssetAmount / targetBestBidPrice; // according to wallet
-                            decimal canToBuyAmount = bestAsk.Quantity; // according to order book
+                    //        // adjust amount according to opposite order book top orders amount
+                    //        decimal wantToBuyAmount = currentAssetAmount / targetBestBidPrice; // according to wallet
+                    //        decimal canToBuyAmount = bestAsk.Quantity; // according to order book
 
-                            // convert back to quote
-                            decimal wantToBuyAmountInQuote = wantToBuyAmount * targetBestBidPrice;
-                            decimal canToBuyAmountInQuote = bestAsk.Quantity * targetBestBidPrice;
+                    //        // convert back to quote
+                    //        decimal wantToBuyAmountInQuote = wantToBuyAmount * targetBestBidPrice;
+                    //        decimal canToBuyAmountInQuote = bestAsk.Quantity * targetBestBidPrice;
 
-                            actualStartAssetAmount = Math.Min(wantToBuyAmountInQuote, canToBuyAmountInQuote);
-                            currentAssetAmount = actualStartAssetAmount;
-                        }
-                        else if (pathInstruction.Action == SymbolAction.Sell)
-                        {
-                            // adjust amount according to opposite order book top orders amount
-                            decimal wantToSellAmount = currentAssetAmount; // according to wallet
-                            decimal canToSellAmount = bestBid.Quantity; // according to order book
-                            actualStartAssetAmount = Math.Min(wantToSellAmount, canToSellAmount);
-                            currentAssetAmount = actualStartAssetAmount;
-                        }
-                    }
+                    //        actualStartAssetAmount = Math.Min(wantToBuyAmountInQuote, canToBuyAmountInQuote);
+                    //        currentAssetAmount = actualStartAssetAmount;
+                    //    }
+                    //    else if (pathInstruction.Action == SymbolAction.Sell)
+                    //    {
+                    //        // adjust amount according to opposite order book top orders amount
+                    //        decimal wantToSellAmount = currentAssetAmount; // according to wallet
+                    //        decimal canToSellAmount = bestBid.Quantity; // according to order book
+                    //        actualStartAssetAmount = Math.Min(wantToSellAmount, canToSellAmount);
+                    //        currentAssetAmount = actualStartAssetAmount;
+                    //    }
+                    //}
 
                     decimal actionTotal;
                     if (pathInstruction.Action == SymbolAction.Buy)

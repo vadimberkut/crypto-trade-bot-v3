@@ -79,6 +79,11 @@ namespace CryptoTradeBot.Exchanges.Binance.Stores
         /// </summary>
         public decimal ConvertAssets(string sourceAsset, string targetAsset, decimal sourceAmount)
         {
+            if(sourceAsset == targetAsset)
+            {
+                return sourceAmount;
+            }
+
             var symbols = _exchangeUtil.GetSymbolsForAssets(sourceAsset, targetAsset);
             symbols = symbols.Select(x => x.ToLowerInvariant()).ToList();
             var storeEntries = _store.Where(x => symbols.Contains(x.Key)).ToList();

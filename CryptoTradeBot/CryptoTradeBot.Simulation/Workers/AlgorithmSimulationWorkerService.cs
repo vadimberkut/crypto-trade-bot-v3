@@ -110,8 +110,10 @@ namespace CryptoTradeBot.Simulation.Workers
                 // run algorith
                 //string startAsset = "IOTA";
                 //decimal startAssetAmount = 1000;
-                string startAsset = "BTC";
-                decimal startAssetAmount = 0.1m;
+                //string startAsset = "BTC";
+                //decimal startAssetAmount = 0.1m;
+                string startAsset = "USDT";
+                decimal startAssetAmount = 100;
                 var solutions = circlePathAlgorithm.Solve(startAsset, startAssetAmount);
 
                 if(solutions.Count != 0)
