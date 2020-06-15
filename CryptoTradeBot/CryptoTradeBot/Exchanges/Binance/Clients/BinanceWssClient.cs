@@ -44,7 +44,7 @@ namespace CryptoTradeBot.Exchanges.Binance
         public async Task ConnectAsync()
         {
             // Websocket.Client (wrapper of System.Net.WebSockets.ClientWebSocket)
-            // NB: no way to disable its logs. Will span the whole console.
+            // NB: no way to disable its logs. Will spam the whole console.
             // NB: added source to project to disable logs
             // https://github.com/Marfusios/websocket-client
 
