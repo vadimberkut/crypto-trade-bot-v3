@@ -348,3 +348,6 @@ Secrets/
 # data logs
 data-logs/
 
+# local stores
+market-data-store/
+

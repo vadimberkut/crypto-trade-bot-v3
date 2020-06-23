@@ -9,7 +9,9 @@ Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CryptoTradeBot.Infrastructu
 EndProject
 Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "Websocket.Client", "websocket-client\src\Websocket.Client\Websocket.Client.csproj", "{2D0F3619-C092-4403-8206-83EB02465479}"
 EndProject
-Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CryptoTradeBot.Simulation", "CryptoTradeBot.Simulation\CryptoTradeBot.Simulation.csproj", "{D281C798-594A-4CD6-AB64-4E304EF86D7E}"
+Project("{9A19103F-16F7-4668-BE54-9A1E7A4F7556}") = "CryptoTradeBot.Simulation", "CryptoTradeBot.Simulation\CryptoTradeBot.Simulation.csproj", "{D281C798-594A-4CD6-AB64-4E304EF86D7E}"
+EndProject
+Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "CryptoTradeBot.DownloadMarketData", "CryptoTradeBot.DownloadMarketData\CryptoTradeBot.DownloadMarketData.csproj", "{351F07AD-B3C1-4B83-9248-15B709603055}"
 EndProject
 Global
 	GlobalSection(SolutionConfigurationPlatforms) = preSolution
@@ -33,6 +35,10 @@ Global
 		{D281C798-594A-4CD6-AB64-4E304EF86D7E}.Debug|Any CPU.Build.0 = Debug|Any CPU
 		{D281C798-594A-4CD6-AB64-4E304EF86D7E}.Release|Any CPU.ActiveCfg = Release|Any CPU
 		{D281C798-594A-4CD6-AB64-4E304EF86D7E}.Release|Any CPU.Build.0 = Release|Any CPU
+		{351F07AD-B3C1-4B83-9248-15B709603055}.Debug|Any CPU.ActiveCfg = Debug|Any CPU
+		{351F07AD-B3C1-4B83-9248-15B709603055}.Debug|Any CPU.Build.0 = Debug|Any CPU
+		{351F07AD-B3C1-4B83-9248-15B709603055}.Release|Any CPU.ActiveCfg = Release|Any CPU
+		{351F07AD-B3C1-4B83-9248-15B709603055}.Release|Any CPU.Build.0 = Release|Any CPU
 	EndGlobalSection
 	GlobalSection(SolutionProperties) = preSolution
 		HideSolutionNode = FALSE
