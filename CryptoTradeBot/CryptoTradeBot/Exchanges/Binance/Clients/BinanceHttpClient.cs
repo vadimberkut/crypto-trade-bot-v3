@@ -106,6 +106,9 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Clients
                         aggregatedResult.Candles.AddRange(intermediateResult.Candles);
                     }
 
+                    // order asc
+                    aggregatedResult.Candles = aggregatedResult.Candles.OrderBy(x => x.OpenTime).ToList();
+
                     return aggregatedResult;
                 }
             }
@@ -149,6 +152,10 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Clients
                     };
                 }).ToList(),
             };
+
+            // order asc
+            dto.Candles = dto.Candles.OrderBy(x => x.OpenTime).ToList();
+
             return dto;
         }
 

@@ -55,9 +55,13 @@ namespace CryptoTradeBot.Simulation.Workers
 
         public async Task StartAsync(CancellationToken cancellationToken)
         {
+            // from book
             //await StartCirclePathSimulationAsync(cancellationToken);
             //await StartLarryWilliamsBookRangeBreakSimulationAsync(cancellationToken);
-            await StartLarryWilliamsBookStrikingDaysSimulationAsync(cancellationToken);
+            //await StartLarryWilliamsBookStrikingDaysSimulationAsync(cancellationToken);
+            
+            // custom
+            await StartCustomNestedBarBreakthroughSimulationAsync(cancellationToken);
         }
 
         public Task StopAsync(CancellationToken cancellationToken)
@@ -327,7 +331,7 @@ namespace CryptoTradeBot.Simulation.Workers
 
 
                     decimal longPositionOpenPrice = currentCandle.OpenPrice + volatilityRange * volatilityRangeEntryPercent;
-                    decimal? longPositionStopLossPrice = volatilityRangeStopLossPercent == null ? default(decimal?) : longPositionOpenPrice - volatilityRange * volatilityRangeStopLossPercent.Value;
+                    decimal? longPositionStoplossPrice = volatilityRangeStopLossPercent == null ? default(decimal?) : longPositionOpenPrice - volatilityRange * volatilityRangeStopLossPercent.Value;
 
                     // position entered
                     if(currentCandle.HighPrice > longPositionOpenPrice)
@@ -335,10 +339,10 @@ namespace CryptoTradeBot.Simulation.Workers
                         // calc position close
                         decimal longPositionClosePrice;
                         bool isClosedByStopLoss = false;
-                        if (longPositionStopLossPrice != null && currentCandle.LowPrice <= longPositionStopLossPrice.Value)
+                        if (longPositionStoplossPrice != null && currentCandle.LowPrice <= longPositionStoplossPrice.Value)
                         {
                             // closed by stop loss
-                            longPositionClosePrice = longPositionStopLossPrice.Value;
+                            longPositionClosePrice = longPositionStoplossPrice.Value;
                             isClosedByStopLoss = true;
                         }
                         else
@@ -443,11 +447,17 @@ namespace CryptoTradeBot.Simulation.Workers
         }
 
         /// <summary>
-        /// Striking days (bars\candles). Page 121.
+        /// Larry Williams Striking days (bars\candles). Page 121.
         /// 1. Buy 1. Day closes below prev day min. Buy if next day price grows above current day max.
         /// 2. Sell 1. Day closes above prev day max. Buy if next day price falls below current day min.
         /// 3. Buy 2. Day closes near the open price afar from max in 25% bar bottom. Buy if next day price grows above current day max.
-        /// 3. Sell 2. Day closes near the open price afar from min in 25% bar top. Sell if next day price falls below current day min.
+        /// 4. Sell 2. Day closes near the open price afar from min in 25% bar top. Sell if next day price falls below current day min.
+        /// Summary: 
+        /// On the average gives small profit during 3 month, during year gives at least not loss. 
+        /// Solely depends on parameters which can give desired results, but in general it's obvious that strategy not going to work.
+        /// Tested on BTCUSDT, DASHUSDT, IOTAUSDT.
+        /// Maybe it works for 2000s markets or some traditional markets. I don't know, but on crypto I didn't manage to get 
+        /// > 60% of profit trades.
         /// </summary>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
@@ -509,7 +519,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 int length = symbolCandlestickHistory.Candles.Count;
 
                 const int maxPositionOpenCheckDurationInBars = 3; // how long to wait after open signal was received. when expired - cancel ([bar condition true; current bar])
-                const int maxOpenPositionDurationInBars = 3; // how long to keep opened position if neither stoploss and takeprofit was hit ([bar opened; bar when closing])
+                const int maxOpenPositionDurationInBars = 15; // how long to keep opened position if neither stoploss and takeprofit was hit ([bar opened; bar when closing])
                 decimal maxDrawdownPercent = 0.8m; // from initial balance
                 decimal makerFeePercent = 0.0025m;
                 decimal? stopLossPercent = 0.08m; // null - no stop loss 
@@ -521,8 +531,8 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 string positionStatus = "NoPosition"; // NoPosition, CheckingPositionOpenCondition, CheckingPositionCloseCondition, 
                 decimal longPositionOpenPrice = 0;
-                decimal? longPositionStopLossPrice = null;
-                decimal? longPositionTakeProfitPrice = null;
+                decimal? longPositionStoplossPrice = null;
+                decimal? longPositionTakeprofitPrice = null;
                 int positionCheckingOpenConditionDurationInBars = 0;
                 int positionDurationInBars = 0;
 
@@ -544,8 +554,8 @@ namespace CryptoTradeBot.Simulation.Workers
                     Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkBuy2StrikingBar = (_prevBar, _currentBar) =>
                     {
                         const decimal inRangeFromHighPercent = 0.25m;
-                        decimal rangeStart = _prevBar.LowPrice;
-                        decimal rangeEnd = _prevBar.LowPrice + (_prevBar.HighPrice - _prevBar.LowPrice) * inRangeFromHighPercent;
+                        decimal rangeStart = _currentBar.LowPrice;
+                        decimal rangeEnd = _currentBar.LowPrice + (_currentBar.HighPrice - _currentBar.LowPrice) * inRangeFromHighPercent;
                         return _currentBar.OpenPrice >= rangeStart && _currentBar.OpenPrice <= rangeEnd &&
                                _currentBar.ClosePrice >= rangeStart && _currentBar.ClosePrice <= rangeEnd; 
                                //_currentBar.ClosePrice <= _currentBar.OpenPrice; // optional
@@ -553,8 +563,8 @@ namespace CryptoTradeBot.Simulation.Workers
                     Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkSell2StrikingBar = (_prevBar, _currentBar) =>
                     {
                         const decimal inRangeFromHighPercent = 0.25m;
-                        decimal rangeStart = _prevBar.HighPrice - (_prevBar.HighPrice - _prevBar.LowPrice) * inRangeFromHighPercent;
-                        decimal rangeEnd = _prevBar.HighPrice;
+                        decimal rangeStart = _currentBar.HighPrice - (_currentBar.HighPrice - _currentBar.LowPrice) * inRangeFromHighPercent;
+                        decimal rangeEnd = _currentBar.HighPrice;
                         return _currentBar.OpenPrice >= rangeStart && _currentBar.OpenPrice <= rangeEnd &&
                                _currentBar.ClosePrice >= rangeStart && _currentBar.ClosePrice <= rangeEnd;
                                //_currentBar.ClosePrice >= _currentBar.OpenPrice; // optional
@@ -563,12 +573,13 @@ namespace CryptoTradeBot.Simulation.Workers
                     if(positionStatus == "NoPosition")
                     {
                         // detect and define position open condition 
-                        if (checkBuy1StrikingBar(prevCandle, currentCandle))
+                        if (false && checkBuy1StrikingBar(prevCandle, currentCandle))
                         {
                             // TODO - make min step from open price
                             longPositionOpenPrice = currentCandle.HighPrice;
-                            longPositionStopLossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
-                            longPositionTakeProfitPrice = takeProfitPercent == null ? default(decimal?) : longPositionOpenPrice + longPositionOpenPrice * takeProfitPercent.Value;
+                            // longPositionStoplossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
+                            longPositionStoplossPrice = currentCandle.LowPrice - currentCandle.LowPrice * 0.01m; // adaptive stoploss
+                            longPositionTakeprofitPrice = takeProfitPercent == null ? default(decimal?) : longPositionOpenPrice + longPositionOpenPrice * takeProfitPercent.Value;
 
                             positionStatus = "CheckingPositionOpenCondition";
 
@@ -577,12 +588,13 @@ namespace CryptoTradeBot.Simulation.Workers
 
                             continue;
                         }
-                        else if(false && checkBuy2StrikingBar(prevCandle, currentCandle))
+                        else if(checkBuy2StrikingBar(prevCandle, currentCandle))
                         {
                             // TODO - make min step from open price
                             longPositionOpenPrice = currentCandle.HighPrice;
-                            longPositionStopLossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
-                            longPositionTakeProfitPrice = takeProfitPercent == null ? default(decimal?) : longPositionOpenPrice + longPositionOpenPrice * takeProfitPercent.Value;
+                            //  longPositionStoplossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
+                            longPositionStoplossPrice = currentCandle.LowPrice - currentCandle.LowPrice * 0.01m; // adaptive stoploss
+                            longPositionTakeprofitPrice = takeProfitPercent == null ? default(decimal?) : longPositionOpenPrice + longPositionOpenPrice * takeProfitPercent.Value;
 
                             positionStatus = "CheckingPositionOpenCondition";
 
@@ -638,17 +650,17 @@ namespace CryptoTradeBot.Simulation.Workers
                         bool isClosedByStopLoss = false;
                         bool isClosedByTakeProfit= false;
                         bool isClosedByDurationTimeout = false;
-                        if (longPositionStopLossPrice != null && currentCandle.LowPrice <= longPositionStopLossPrice.Value)
+                        if (longPositionStoplossPrice != null && currentCandle.LowPrice <= longPositionStoplossPrice.Value)
                         {
                             // close by stop loss
-                            longPositionClosePrice = longPositionStopLossPrice.Value;
+                            longPositionClosePrice = longPositionStoplossPrice.Value;
                             isClosed = true;
                             isClosedByStopLoss = true;
                         }
-                        else if(longPositionTakeProfitPrice != null && currentCandle.HighPrice >= longPositionTakeProfitPrice.Value)
+                        else if(longPositionTakeprofitPrice != null && currentCandle.HighPrice >= longPositionTakeprofitPrice.Value)
                         {
                             // close by take profit
-                            longPositionClosePrice = longPositionTakeProfitPrice.Value;
+                            longPositionClosePrice = longPositionTakeprofitPrice.Value;
                             isClosed = true;
                             isClosedByTakeProfit = true;
                         }
@@ -793,6 +805,425 @@ namespace CryptoTradeBot.Simulation.Workers
                 decimal totalPnlPercent = Math.Round(totalPnl / initialQuoteAssetAmount, 4);
 
                 _logger.LogInformation("");
+                _logger.LogInformation($"Symbol={assetToTest.Symbol}");
+                _logger.LogInformation($"CandlestickInterval={assetToTest.CandlestickInterval}");
+                _logger.LogInformation($"Range: From={assetToTest.From.ToUtcString()}, To={assetToTest.To.ToUtcString()}; Timespan={assetToTest.To.Subtract(assetToTest.From).ToString()}");
+                _logger.LogInformation($"Timespan={assetToTest.To.Subtract(assetToTest.From).ToString()}");
+                _logger.LogInformation($"barsCount={barsCount}");
+                _logger.LogInformation($"tradesCount={tradesCount}");
+                _logger.LogInformation($"profitTradesCount={profitTradesCount} ({profitTradesPercent}%)");
+                _logger.LogInformation($"lossTradesCount={lossTradesCount} ({lossTradesPercent}%)");
+                _logger.LogInformation($"closedByStopLossTradesCount={closedByStopLossTradesCount}");
+                _logger.LogInformation($"closedByTakeProfitTradesCount={closedByTakeProfitTradesCount}");
+                _logger.LogInformation($"closedByDurationTimeoutTradesCount={closedByDurationTimeoutTradesCount} (profit={closedByDurationTimeoutProfitTradesCount}, loss={closedByDurationTimeoutLossTradesCount})");
+                _logger.LogInformation($"maxProfitTradesInARow={maxProfitTradesInARow}");
+                _logger.LogInformation($"maxLossTradesInARow={maxLossTradesInARow}");
+                _logger.LogInformation($"profit position duration=[{minOpenProfitPositionDuration}; {avgerageOpenProfitPositionDuration}; {maxOpenProfitPositionDuration}]");
+                _logger.LogInformation($"loss position duration=[{minOpenLossPositionDuration}; {avgerageOpenLossPositionDuration}; {maxOpenLossPositionDuration}]");
+                _logger.LogInformation($"");
+
+                _logger.LogInformation($"profit=[{minProfit}; {averageProfit}; {maxProfit}]");
+                _logger.LogInformation($"loss=[{minLoss}; {averageLoss}; {maxLoss}]");
+                _logger.LogInformation($"");
+
+                _logger.LogInformation($"profit percent=[{minProfitPercent}; {averageProfitPercent}; {maxProfitPercent}]");
+                _logger.LogInformation($"loss percent=[{minLossPercent}; {averageLossPercent}; {maxLossPercent}]");
+                _logger.LogInformation($"");
+
+                _logger.LogInformation($"initalBalance={initalBalance}");
+                _logger.LogInformation($"finalBalance={finalBalance}");
+                _logger.LogInformation($"totalPnl={totalPnl}");
+                _logger.LogInformation($"totalPnlPercent={totalPnlPercent}");
+
+                _logger.LogInformation($"Symbol={assetToTest.Symbol}. Done.");
+                _logger.LogInformation("");
+                _logger.LogInformation("----------------------------------------------------");
+                _logger.LogInformation("");
+            }
+        }
+
+        /// <summary>
+        /// Custom nested bar strategy.
+        /// 1. Current bar is nested bar. Prev bar is covering bar. Nested bar is labeled as nested only after it completes, so the condition only 
+        /// becomes true on 3rd bar.
+        /// 1.1 Covering bar must be no more that 2x range of nested bar.
+        /// 1.2 -
+        /// 2. Buy/Sell when high or low price +- 1% of covering bar range is broken.
+        /// 3. Stoploss - below covering bar low - 10% of covering bar range, Takeprofit - covering bar high + covering bar range
+        /// 4. Close open position after N bars if neither stoploss or takeprofit is hit
+        /// </summary>
+        /// <param name="cancellationToken"></param>
+        /// <returns></returns>
+        private async Task StartCustomNestedBarBreakthroughSimulationAsync(CancellationToken cancellationToken)
+        {
+            const string strategyName = "CustomNestedBarBreakthrough";
+
+            var assetsToTest = new[]
+            {
+                new
+                {
+                    Symbol = "BTCUSDT",
+                    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(3 * 30)),
+                    To = DateTime.UtcNow,
+                    CandlestickInterval = "4h",
+                },
+                //new
+                //{
+                //    Symbol = "IOTAUSDT",
+                //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
+                //    To = DateTime.UtcNow,
+                //    CandlestickInterval = "4h",
+                //},
+                // new
+                //{
+                //    Symbol = "DASHUSDT",
+                //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
+                //    To = DateTime.UtcNow,
+                //    CandlestickInterval = "4h",
+                //},
+            };
+
+            foreach (var assetToTest in assetsToTest)
+            {
+                _logger.LogInformation($"Symbol={assetToTest.Symbol}.");
+
+                var symbolCandlestickHistory = await BinanceLoadSymbolCandlestickHistory(assetToTest.Symbol, assetToTest.From, assetToTest.To, assetToTest.CandlestickInterval);
+
+                // Calculates pnl
+                Func<string, decimal, decimal, decimal, decimal, (decimal pnl, decimal pnlPercent, decimal quoteAssetAmountAfter)> calcPositionPnl =
+                    (_orderType, _quoteAssetAmountBefore, _openPrice, _closePrice, _makerFeePercent) =>
+                    {
+                        if (_orderType != "long")
+                        {
+                            throw new NotImplementedException();
+                        }
+
+                        decimal _baseAssetAmount = _quoteAssetAmountBefore / _openPrice;
+                        _baseAssetAmount = _baseAssetAmount - _baseAssetAmount * _makerFeePercent; // fee
+
+                        decimal _quoteAssetAmountAfter = _baseAssetAmount * _closePrice;
+                        _quoteAssetAmountAfter = _quoteAssetAmountAfter - _quoteAssetAmountAfter * _makerFeePercent; // fee
+
+                        decimal _pnl = _quoteAssetAmountAfter - _quoteAssetAmountBefore;
+                        decimal _pnlPercent = Math.Round(_pnl / _quoteAssetAmountBefore, 4);
+                        return (pnl: _pnl, pnlPercent: _pnlPercent, quoteAssetAmountAfter: _quoteAssetAmountAfter);
+                    };
+
+
+                // test
+                int length = symbolCandlestickHistory.Candles.Count;
+
+                const decimal coveringBarRangeCanBeGreaterThanNestedBarRangePercent = 0.25m;
+
+                const int maxPositionOpenCheckDurationInBars = 5; // how long to wait after open signal was received. when expired - cancel ([bar condition true; current bar])
+                const int maxOpenPositionDurationInBars = 12; // how long to keep opened position if neither stoploss and takeprofit was hit ([bar opened; bar when closing])
+                decimal maxDrawdownPercent = 0.8m; // from initial balance
+                decimal makerFeePercent = 0.0025m;
+                decimal? stopLossPercent = null; // null - no stoploss or adaptive stoploss
+                decimal? takeProfitPercent = null; // null - no takeprofit or adaptive takeprofit
+                decimal? maxStoplossPercent = 0.05m; // for adaptive stoploss only (excluding value)
+                decimal? maxTakeprofitPercent = 0.25m; // for adaptive takeprofit only (excluding value)
+                decimal initialQuoteAssetAmount = 1000; // in quote asset. E.g. BTCUSDT 1000USDT
+                decimal currentQuoteAssetAmount = initialQuoteAssetAmount;
+
+                var testResults = new List<SimpleTradeResultModel>();
+
+                string positionStatus = "NoPosition"; // NoPosition, CheckingPositionOpenCondition, CheckingPositionCloseCondition, 
+                decimal longPositionOpenPrice = 0;
+                decimal? longPositionStoplossPrice = null;
+                decimal? longPositionTakeprofitPrice = null;
+                int positionCheckingOpenConditionDurationInBars = 0;
+                int positionDurationInBars = 0;
+
+                for (int i = 2; i < length - 1; i++)
+                {
+                    var beforePrevBar = symbolCandlestickHistory.Candles[i - 2]; // supposed to be covering bar
+                    var prevBar = symbolCandlestickHistory.Candles[i - 1]; // supposed to be nested bar
+                    var currentBar = symbolCandlestickHistory.Candles[i]; // current bar when condition is checked
+
+                    // check whether current bar is striking bar
+                    Func<GeneralCandlestickModel, GeneralCandlestickModel, GeneralCandlestickModel, bool> checkIsNestedBar = (_beforePrevBar, _prevBar, _currentBar) =>
+                    {
+                        decimal coveringBarRange = _beforePrevBar.HighPrice - _beforePrevBar.LowPrice;
+                        decimal nestedBarRange = _prevBar.HighPrice - _prevBar.LowPrice;
+                        return _beforePrevBar.HighPrice >= _prevBar.HighPrice &&
+                               _beforePrevBar.LowPrice <= _prevBar.LowPrice &&
+                               // check covering bar range isn't too big
+                               coveringBarRange >= (nestedBarRange + nestedBarRange * coveringBarRangeCanBeGreaterThanNestedBarRangePercent);
+                    };
+                    Func<GeneralCandlestickModel, GeneralCandlestickModel, GeneralCandlestickModel, bool> checkBuyNestedBar = (_beforePrevBar, _prevBar, _currentBar) =>
+                    {
+                        decimal coveringBarRange = _beforePrevBar.HighPrice - _beforePrevBar.LowPrice;
+                        decimal coveringBarRangePercent = 0.1m;
+                        return _currentBar.HighPrice > (_beforePrevBar.HighPrice + coveringBarRange * coveringBarRangePercent);
+                    };
+
+                    if (positionStatus == "NoPosition")
+                    {
+                        // detect and define position open condition 
+                        if (checkIsNestedBar(beforePrevBar, prevBar, currentBar))
+                        {
+                            decimal coveringBarRange = beforePrevBar.HighPrice - beforePrevBar.LowPrice;
+                            decimal coveringBarOpenRangePercent = 0.01m;
+                            decimal coveringBarStoplossRangePercent = 0.05m;
+                            decimal coveringBarTakeprofitRangePercent = 5m;
+
+                            longPositionOpenPrice = beforePrevBar.HighPrice + coveringBarRange * coveringBarOpenRangePercent;
+                            longPositionStoplossPrice = stopLossPercent == null ? beforePrevBar.LowPrice - coveringBarRange * coveringBarStoplossRangePercent : longPositionStoplossPrice;
+                            longPositionTakeprofitPrice = takeProfitPercent == null ? longPositionOpenPrice + coveringBarRange * coveringBarTakeprofitRangePercent : takeProfitPercent;
+
+                            if(longPositionStoplossPrice == null)
+                            {
+                                throw new Exception("Stoploss can't be null!");
+                            }
+                            if (longPositionTakeprofitPrice == null)
+                            {
+                                throw new Exception("Takeprofit can't be null!");
+                            }
+
+                            // calc and validate adaptive stoploss and takeprofit percents relative to open price
+                            decimal currentStoplossPercent = Math.Round(1 - longPositionStoplossPrice.Value / longPositionOpenPrice, 2);
+                            decimal currentTakeprofitPercent = Math.Round(1 - longPositionOpenPrice / longPositionTakeprofitPrice.Value, 2);
+                            if(maxStoplossPercent != null && currentStoplossPercent > maxStoplossPercent)
+                            {
+                                _logger.LogWarning($"Stoploss={currentStoplossPercent}%, but can't be greater than {maxStoplossPercent}%!");
+                                positionStatus = "NoPosition";
+                                positionCheckingOpenConditionDurationInBars = 0;
+                                continue;
+                            }
+                            if (maxTakeprofitPercent != null && currentTakeprofitPercent > maxTakeprofitPercent)
+                            {
+                                _logger.LogWarning($"Takeprofit={currentTakeprofitPercent}%, but can't be greater than {maxTakeprofitPercent}%!");
+                                positionStatus = "NoPosition";
+                                positionCheckingOpenConditionDurationInBars = 0;
+                                continue;
+                            }
+
+                            positionStatus = "CheckingPositionOpenCondition";
+
+                            // count bars while checking for position open condition
+                            positionCheckingOpenConditionDurationInBars += 1;
+
+                            continue;
+                        }
+                    }
+                    else if (positionStatus == "CheckingPositionOpenCondition")
+                    {
+                        // count bars while checking for position open condition
+                        positionCheckingOpenConditionDurationInBars += 1;
+
+                        // terminate if waiting too long for particular open signal
+                        if (positionCheckingOpenConditionDurationInBars >= maxPositionOpenCheckDurationInBars)
+                        {
+                            positionStatus = "NoPosition";
+                            positionCheckingOpenConditionDurationInBars = 0;
+                        }
+
+                        // check for position open condition
+                        //if (currentBar.HighPrice >= longPositionOpenPrice)
+                        if (currentBar.ClosePrice >= longPositionOpenPrice)
+                        {
+                            positionStatus = "CheckingPositionCloseCondition";
+                            positionCheckingOpenConditionDurationInBars = 0;
+
+                            // process current bar again by different status as it can trigger stoploss or close condition.
+                            // i.e. possibility to open and close position during the same bar
+                            //i -= 1;
+
+                            // don't process current bar. check stoploss and takeprofit only on next bar
+                            i += 0;
+                            //// count bars while in opened position
+                            //positionDurationInBars += 1;
+
+                            continue;
+                        }
+
+                        continue;
+                    }
+                    else if (positionStatus == "CheckingPositionCloseCondition")
+                    {
+                        // count bars while in opened position
+                        positionDurationInBars += 1;
+
+                        // check for stoploss condition
+                        // check for takeprofit condition
+                        // check for termination by duration condition
+                        decimal longPositionClosePrice = 0;
+                        bool isClosed = false;
+                        bool isClosedByStopLoss = false;
+                        bool isClosedByTakeProfit = false;
+                        bool isClosedByDurationTimeout = false;
+                        if (longPositionStoplossPrice != null && currentBar.LowPrice <= longPositionStoplossPrice.Value)
+                        {
+                            // close by stop loss
+                            longPositionClosePrice = longPositionStoplossPrice.Value;
+                            isClosed = true;
+                            isClosedByStopLoss = true;
+                        }
+                        else if (longPositionTakeprofitPrice != null && currentBar.HighPrice >= longPositionTakeprofitPrice.Value)
+                        {
+                            // close by take profit
+                            longPositionClosePrice = longPositionTakeprofitPrice.Value;
+                            isClosed = true;
+                            isClosedByTakeProfit = true;
+                        }
+                        else if (positionDurationInBars >= maxOpenPositionDurationInBars)
+                        {
+                            // close by duration
+                            longPositionClosePrice = currentBar.ClosePrice; // take close time
+                            isClosed = true;
+                            isClosedByDurationTimeout = true;
+                        }
+
+                        // close on first profit bar opening
+                        var closePriceTemp1 = currentBar.OpenPrice;
+                        var pnlTuple1 = calcPositionPnl("long", currentQuoteAssetAmount, longPositionOpenPrice, closePriceTemp1, makerFeePercent);
+                        if (positionDurationInBars == 1 && pnlTuple1.pnl > 0)
+                        {
+                            // close on first profit bar opening
+                            _logger.LogInformation($"+++ Close on first profit bar opening. +{pnlTuple1.pnl}");
+                            longPositionClosePrice = currentBar.OpenPrice;
+                            isClosed = true;
+                            isClosedByDurationTimeout = true;
+                        }
+                        else
+                        {
+                            // calc current PnL
+                            var closePriceTemp0 = currentBar.ClosePrice;
+                            var pnlTuple0 = calcPositionPnl("long", currentQuoteAssetAmount, longPositionOpenPrice, closePriceTemp0, makerFeePercent);
+                            _logger.LogInformation($"=== current pnl={Math.Round(pnlTuple0.pnl, 2)} ({pnlTuple0.pnlPercent}%)");
+                        }
+
+                        if (isClosed)
+                        {
+                            _logger.LogInformation($"=== CLOSED");
+                            _logger.LogInformation($"===");
+                        }
+
+                        // position closed
+                        if (isClosed)
+                        {
+                            // calc PnL
+                            var pnlTuple = calcPositionPnl("long", currentQuoteAssetAmount, longPositionOpenPrice, longPositionClosePrice, makerFeePercent);
+                            currentQuoteAssetAmount = pnlTuple.quoteAssetAmountAfter;
+
+                            var candlestickIntervalConfig = BinanceConfig.GetCandlestickChartInterval(assetToTest.CandlestickInterval);
+
+                            var result = new SimpleTradeResultModel
+                            {
+                                Balance = currentQuoteAssetAmount,
+                                Pnl = pnlTuple.pnl,
+                                PnlPercent = pnlTuple.pnlPercent,
+                                IsClosedByStopLoss = isClosedByStopLoss,
+                                IsClosedByTakeProfit = isClosedByTakeProfit,
+                                IsClosedByDurationTimeout = isClosedByDurationTimeout,
+                                InPositionDuration = positionDurationInBars * candlestickIntervalConfig.TimeSpan,
+                            };
+                            testResults.Add(result);
+
+                            positionStatus = "NoPosition";
+                            positionCheckingOpenConditionDurationInBars = 0;
+                            positionDurationInBars = 0;
+
+                            // check drowdown
+                            decimal drowdownPercent = 1 - result.Balance / initialQuoteAssetAmount;
+                            if (drowdownPercent >= maxDrawdownPercent)
+                            {
+                                _logger.LogInformation($"Reached max drowdown of {Math.Round(maxDrawdownPercent * 100, 2)}%.");
+                                break;
+                            }
+                        }
+                    }
+                }
+
+                // add placeholders for profit and loss trade
+                if (!testResults.Any(x => x.Pnl > 0))
+                {
+                    testResults.Add(new SimpleTradeResultModel()
+                    {
+                        Pnl = 0.001m,
+                        PnlPercent = 0.00001m,
+                    });
+                }
+                if (!testResults.Any(x => x.Pnl <= 0))
+                {
+                    testResults.Add(new SimpleTradeResultModel()
+                    {
+                        Pnl = -0.001m,
+                        PnlPercent = -0.00001m,
+                    });
+                }
+
+                var profitTrades = testResults.Where(x => x.Pnl > 0);
+                var lossTrades = testResults.Where(x => x.Pnl <= 0);
+
+                // stats
+                int barsCount = symbolCandlestickHistory.Candles.Count;
+                int tradesCount = testResults.Count;
+                int profitTradesCount = profitTrades.Count();
+                int lossTradesCount = lossTrades.Count();
+                decimal profitTradesPercent = Math.Round((decimal)profitTradesCount / (decimal)tradesCount, 2);
+                decimal lossTradesPercent = Math.Round((decimal)lossTradesCount / (decimal)tradesCount, 2);
+                int closedByStopLossTradesCount = testResults.Count(x => x.IsClosedByStopLoss);
+                int closedByTakeProfitTradesCount = testResults.Count(x => x.IsClosedByTakeProfit);
+                int closedByDurationTimeoutTradesCount = testResults.Count(x => x.IsClosedByDurationTimeout);
+                int closedByDurationTimeoutProfitTradesCount = profitTrades.Count(x => x.IsClosedByDurationTimeout);
+                int closedByDurationTimeoutLossTradesCount = lossTrades.Count(x => x.IsClosedByDurationTimeout);
+                int maxProfitTradesInARow = testResults.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
+                {
+                    if (curr.item.Pnl > 0)
+                    {
+                        prev.currentCount += 1;
+                        prev.max = Math.Max(prev.currentCount, prev.max);
+                    }
+                    else if (curr.item.Pnl <= 0)
+                    {
+                        prev.currentCount = 0;
+                    }
+                    return prev;
+                }).max;
+                int maxLossTradesInARow = testResults.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
+                {
+                    if (curr.item.Pnl <= 0)
+                    {
+                        prev.currentCount += 1;
+                        prev.max = Math.Max(prev.currentCount, prev.max);
+                    }
+                    else if (curr.item.Pnl > 0)
+                    {
+                        prev.currentCount = 0;
+                    }
+                    return prev;
+                }).max;
+
+                TimeSpan minOpenProfitPositionDuration = profitTrades.Min(x => x.InPositionDuration);
+                TimeSpan avgerageOpenProfitPositionDuration = TimeSpan.FromSeconds(profitTrades.Average(x => x.InPositionDuration.TotalSeconds));
+                TimeSpan maxOpenProfitPositionDuration = profitTrades.Max(x => x.InPositionDuration);
+                TimeSpan minOpenLossPositionDuration = lossTrades.Min(x => x.InPositionDuration);
+                TimeSpan avgerageOpenLossPositionDuration = TimeSpan.FromSeconds(lossTrades.Average(x => x.InPositionDuration.TotalSeconds));
+                TimeSpan maxOpenLossPositionDuration = lossTrades.Max(x => x.InPositionDuration);
+
+                decimal minProfit = Math.Round(profitTrades.Min(x => x.Pnl), 2);
+                decimal averageProfit = Math.Round(profitTrades.Aggregate(0m, (avg, x) => avg + (x.Pnl / testResults.Count)), 2);
+                decimal maxProfit = Math.Round(profitTrades.Max(x => x.Pnl), 2);
+                decimal minLoss = Math.Round(lossTrades.Max(x => x.Pnl), 2);
+                decimal averageLoss = Math.Round(lossTrades.Aggregate(0m, (avg, x) => avg + (x.Pnl / testResults.Count)), 2);
+                decimal maxLoss = Math.Round(lossTrades.Min(x => x.Pnl), 2);
+
+                decimal minProfitPercent = Math.Round(profitTrades.Min(x => x.PnlPercent), 4);
+                decimal averageProfitPercent = Math.Round(profitTrades.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / testResults.Count)), 4);
+                decimal maxProfitPercent = Math.Round(profitTrades.Max(x => x.PnlPercent), 4);
+                decimal minLossPercent = Math.Round(lossTrades.Max(x => x.PnlPercent), 4);
+                decimal averageLossPercent = Math.Round(lossTrades.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / testResults.Count)), 4);
+                decimal maxLossPercent = Math.Round(lossTrades.Min(x => x.PnlPercent), 4);
+
+                decimal initalBalance = initialQuoteAssetAmount;
+                decimal finalBalance = testResults.Last().Balance;
+                decimal totalPnl = Math.Round(testResults.Aggregate(0m, (avg, x) => avg + x.Pnl), 2);
+                decimal totalPnlPercent = Math.Round(totalPnl / initialQuoteAssetAmount, 4);
+
+                _logger.LogInformation("");
+                _logger.LogInformation($"Strategy={strategyName}");
                 _logger.LogInformation($"Symbol={assetToTest.Symbol}");
                 _logger.LogInformation($"CandlestickInterval={assetToTest.CandlestickInterval}");
                 _logger.LogInformation($"Range: From={assetToTest.From.ToUtcString()}, To={assetToTest.To.ToUtcString()}; Timespan={assetToTest.To.Subtract(assetToTest.From).ToString()}");
