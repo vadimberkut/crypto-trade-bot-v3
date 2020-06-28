@@ -32,7 +32,7 @@ namespace CryptoTradeBot.StrategyRunner.Models
         public List<SimpleTradeResultModel> Results { get; private set; }
         public int BarsCount { get; private set; }
 
-        // TODO - handle no results case
+
         #region Computed
 
         private bool IsAnyResults => Results != null && Results.Any();
@@ -45,8 +45,8 @@ namespace CryptoTradeBot.StrategyRunner.Models
         private int ProfitTradesCount => ProfitResults.Count();
         private int LossTradesCount => LossResults.Count();
 
-        private decimal ProfitTradesPercent => Math.Round((decimal)ProfitTradesCount / (decimal)TradesCount, 2);
-        private decimal LossTradesPercent => Math.Round((decimal)LossTradesCount / (decimal)TradesCount, 2);
+        private decimal ProfitTradesPercent => IsNoResults ? 0 : Math.Round((decimal)ProfitTradesCount / (decimal)TradesCount, 2);
+        private decimal LossTradesPercent => IsNoResults ? 0 : Math.Round((decimal)LossTradesCount / (decimal)TradesCount, 2);
 
         private int ClosedByStopLossTradesCount => Results.Count(x => x.IsClosedByStopLoss);
         private int ClosedByTakeProfitTradesCount => Results.Count(x => x.IsClosedByTakeProfit);
@@ -55,7 +55,7 @@ namespace CryptoTradeBot.StrategyRunner.Models
         private int ClosedByDurationTimeoutProfitTradesCount => ProfitResults.Count(x => x.IsClosedByDurationTimeout);
         private int ClosedByDurationTimeoutLossTradesCount => LossResults.Count(x => x.IsClosedByDurationTimeout);
 
-        private int MaxProfitTradesInARow => Results.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
+        private int MaxProfitTradesInARow => IsNoResults ? 0 : Results.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
         {
             if (curr.item.Pnl > 0)
             {
@@ -68,7 +68,7 @@ namespace CryptoTradeBot.StrategyRunner.Models
             }
             return prev;
         }).max;
-        private int MaxLossTradesInARow => Results.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
+        private int MaxLossTradesInARow => IsNoResults ? 0 : Results.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
         {
             if (curr.item.Pnl <= 0)
             {
@@ -82,34 +82,33 @@ namespace CryptoTradeBot.StrategyRunner.Models
             return prev;
         }).max;
 
-        private TimeSpan MinOpenProfitPositionDuration => ProfitResults.Min(x => x.PositionDuration);
-        private TimeSpan AvgerageOpenProfitPositionDuration => TimeSpan.FromSeconds(ProfitResults.Average(x => x.PositionDuration.TotalSeconds));
-        private TimeSpan MaxOpenProfitPositionDuration => ProfitResults.Max(x => x.PositionDuration);
-        private TimeSpan MinOpenLossPositionDuration => LossResults.Min(x => x.PositionDuration);
-        private TimeSpan AvgerageOpenLossPositionDuration => TimeSpan.FromSeconds(LossResults.Average(x => x.PositionDuration.TotalSeconds));
-        private TimeSpan MaxOpenLossPositionDuration => LossResults.Max(x => x.PositionDuration);
+        private TimeSpan MinOpenProfitPositionDuration => IsNoResults ? TimeSpan.Zero : ProfitResults.Min(x => x.PositionDuration);
+        private TimeSpan AvgerageOpenProfitPositionDuration => IsNoResults ? TimeSpan.Zero : TimeSpan.FromSeconds(ProfitResults.Average(x => x.PositionDuration.TotalSeconds));
+        private TimeSpan MaxOpenProfitPositionDuration => IsNoResults ? TimeSpan.Zero : ProfitResults.Max(x => x.PositionDuration);
+        private TimeSpan MinOpenLossPositionDuration => IsNoResults ? TimeSpan.Zero : LossResults.Min(x => x.PositionDuration);
+        private TimeSpan AvgerageOpenLossPositionDuration => IsNoResults ? TimeSpan.Zero : TimeSpan.FromSeconds(LossResults.Average(x => x.PositionDuration.TotalSeconds));
+        private TimeSpan MaxOpenLossPositionDuration => IsNoResults ? TimeSpan.Zero : LossResults.Max(x => x.PositionDuration);
 
-        private decimal MinProfit => Math.Round(ProfitResults.Min(x => x.Pnl), 2);
-        private decimal AverageProfit => Math.Round(ProfitResults.Aggregate(0m, (avg, x) => avg + (x.Pnl / Results.Count)), 2);
-        private decimal MaxProfit => Math.Round(ProfitResults.Max(x => x.Pnl), 2);
-        private decimal MinLoss => Math.Round(LossResults.Max(x => x.Pnl), 2);
-        private decimal AverageLoss => Math.Round(LossResults.Aggregate(0m, (avg, x) => avg + (x.Pnl / Results.Count)), 2);
-        private decimal MaxLoss => Math.Round(LossResults.Min(x => x.Pnl), 2);
+        private decimal MinProfit => IsNoResults ? 0 : Math.Round(ProfitResults.Min(x => x.Pnl), 2);
+        private decimal AverageProfit => IsNoResults ? 0 : Math.Round(ProfitResults.Aggregate(0m, (avg, x) => avg + (x.Pnl / Results.Count)), 2);
+        private decimal MaxProfit => IsNoResults ? 0 : Math.Round(ProfitResults.Max(x => x.Pnl), 2);
+        private decimal MinLoss => IsNoResults ? 0 : Math.Round(LossResults.Max(x => x.Pnl), 2);
+        private decimal AverageLoss => IsNoResults ? 0 : Math.Round(LossResults.Aggregate(0m, (avg, x) => avg + (x.Pnl / Results.Count)), 2);
+        private decimal MaxLoss => IsNoResults ? 0 : Math.Round(LossResults.Min(x => x.Pnl), 2);
 
-        private decimal MinProfitPercent => Math.Round(ProfitResults.Min(x => x.PnlPercent), 4);
-        private decimal AverageProfitPercent => Math.Round(ProfitResults.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / Results.Count)), 4);
-        private decimal MaxProfitPercent => Math.Round(ProfitResults.Max(x => x.PnlPercent), 4);
-        private decimal MinLossPercent => Math.Round(LossResults.Max(x => x.PnlPercent), 4);
-        private decimal AverageLossPercent => Math.Round(LossResults.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / Results.Count)), 4);
-        private decimal MaxLossPercent => Math.Round(LossResults.Min(x => x.PnlPercent), 4);
-
+        private decimal MinProfitPercent => IsNoResults ? 0 : Math.Round(ProfitResults.Min(x => x.PnlPercent), 4);
+        private decimal AverageProfitPercent => IsNoResults ? 0 : Math.Round(ProfitResults.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / Results.Count)), 4);
+        private decimal MaxProfitPercent => IsNoResults ? 0 : Math.Round(ProfitResults.Max(x => x.PnlPercent), 4);
+        private decimal MinLossPercent => IsNoResults ? 0 : Math.Round(LossResults.Max(x => x.PnlPercent), 4);
+        private decimal AverageLossPercent => IsNoResults ? 0 : Math.Round(LossResults.Aggregate(0m, (avg, x) => avg + (x.PnlPercent / Results.Count)), 4);
+        private decimal MaxLossPercent => IsNoResults ? 0 : Math.Round(LossResults.Min(x => x.PnlPercent), 4);
 
 
         private decimal InitalBalance => IsNoResults ? 0 : Results.First().BalanceBefore;
         private decimal FinalBalance => IsNoResults ? 0 : Results.Last().Balance;
 
-        private decimal TotalPnl => Math.Round(Results.Aggregate(0m, (avg, x) => avg + x.Pnl), 2);
-        private decimal TotalPnlPercent => Math.Round(TotalPnl / InitalBalance, 4);
+        private decimal TotalPnl => IsNoResults ? 0 : Math.Round(Results.Aggregate(0m, (avg, x) => avg + x.Pnl), 2);
+        private decimal TotalPnlPercent => IsNoResults ? 0 : Math.Round(TotalPnl / InitalBalance, 4);
 
         #endregion
 
