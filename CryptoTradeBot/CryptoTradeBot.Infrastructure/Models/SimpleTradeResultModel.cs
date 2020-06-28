@@ -28,8 +28,8 @@ namespace CryptoTradeBot.Infrastructure.Models
         public DateTime ClosedAt { get; set; }
 
         /// <summary>
-        /// Intermediate results during position was opened.
-        /// E.g. opened on bar 450 closed on 460. List contains 10 records with intermediate pnl.
+        /// Intermediate results during position was opened. Each item represents 1 bar.
+        /// E.g. opened on bar 450 closed on 460. List contains 10 records with intermediate pnl for each bar.
         /// </summary>
         public List<PositionPnlModel> IntermediateResults { get; set; }
     }

@@ -7,6 +7,7 @@ using CryptoTradeBot.StrategyRunner.Settings;
 using Microsoft.Extensions.Logging;
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
@@ -83,7 +84,11 @@ namespace CryptoTradeBot.StrategyRunner
                 );
                 var bars = marketHistoryData.Bars;
 
+                // reset
+                _status = StrategyRunnerStatus.NoOpenedPosition;
                 _currentBalance = _settings.InitialBalance;
+                _currentPosition = null;
+
                 var results = new List<SimpleTradeResultModel>();
                 int positionWaitOpeningDurationInBars = 0;
                 PositionOpeningDetailsModel positionOpeningDetails = null;
@@ -107,9 +112,13 @@ namespace CryptoTradeBot.StrategyRunner
                                 decimal currentStoplossPercent = Math.Round(1 - positionOpeningDetails.StoplossPrice.Value / positionOpeningDetails.OpenPrice, 2);
                                 if (_settings.MaxStoplossPercent != null && currentStoplossPercent > _settings.MaxStoplossPercent.Value)
                                 {
-                                    _logger.LogWarning($"Stoploss={currentStoplossPercent}%, but can't be greater than {_settings.MaxStoplossPercent.Value}%!");
+                                    if(_strategyDefinition.IsLogIntermediateResults)
+                                    {
+                                        _logger.LogWarning($"Stoploss={currentStoplossPercent}%, but can't be greater than {_settings.MaxStoplossPercent.Value}%!");
+                                    }
                                     _status = StrategyRunnerStatus.NoOpenedPosition;
                                     positionWaitOpeningDurationInBars = 0;
+                                    positionOpeningDetails = null;
                                     continue;
                                 }
                             }
@@ -118,9 +127,13 @@ namespace CryptoTradeBot.StrategyRunner
                                 decimal currentTakeprofitPercent = Math.Round(1 - positionOpeningDetails.OpenPrice / positionOpeningDetails.TakeprofitPrice.Value, 2);
                                 if (_settings.MaxTakeprofitPercent != null && currentTakeprofitPercent > _settings.MaxTakeprofitPercent.Value)
                                 {
-                                    _logger.LogWarning($"Takeprofit={currentTakeprofitPercent}%, but can't be greater than {_settings.MaxTakeprofitPercent.Value}%!");
+                                    if (_strategyDefinition.IsLogIntermediateResults)
+                                    {
+                                        _logger.LogWarning($"Takeprofit={currentTakeprofitPercent}%, but can't be greater than {_settings.MaxTakeprofitPercent.Value}%!");
+                                    }
                                     _status = StrategyRunnerStatus.NoOpenedPosition;
                                     positionWaitOpeningDurationInBars = 0;
+                                    positionOpeningDetails = null;
                                     continue;
                                 }
                             }
@@ -131,6 +144,8 @@ namespace CryptoTradeBot.StrategyRunner
 
                             continue;
                         }
+
+                        continue;
                     }
                     else if (_status == StrategyRunnerStatus.WaitingPositionOpening)
                     {
@@ -142,6 +157,7 @@ namespace CryptoTradeBot.StrategyRunner
                         {
                             _status = StrategyRunnerStatus.NoOpenedPosition;
                             positionWaitOpeningDurationInBars = 0;
+                            positionOpeningDetails = null;
                             continue;
                         }
 
@@ -326,9 +342,114 @@ namespace CryptoTradeBot.StrategyRunner
             return runSummary;
         }
 
+        /// <summary>
+        /// Returns insights for strategy run summaries
+        /// </summary>
         public void GetInsights(IEnumerable<StrategyRunSummaryModel> strategyRunSummaries)
         {
+            foreach (var strategyRunSummary in strategyRunSummaries)
+            {
+                const int firstN = 2;
+                const int minIntermediateN = 2;
+                const int lastN = 1;
 
+                int minIntermediateResults1 = firstN + lastN;
+                int minIntermediateResults2 = firstN + minIntermediateN + lastN;
+
+                const int veryFastPositionMaxDurationInBars = 2;
+
+                // (-+) loss position (at the start) goes profit (at the close)
+                int lossPositionGoesProfitCount = strategyRunSummary.Results
+                    .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                    .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsLoss) && x.IntermediateResults.TakeLast(lastN).Any(y => y.IsProfit));
+
+                // (+-) profit position (at the start) goes loss (at the close)
+                int profitPositionGoesLossCount = strategyRunSummary.Results
+                    .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                    .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsProfit) && x.IntermediateResults.TakeLast(lastN).Any(y => y.IsLoss));
+
+                // (-+-) loss postion goes profit and then back loss
+                int lossPositionGoestProfitAndThenBackLossCount = strategyRunSummary.Results
+                   .Where(x => x.IntermediateResults.Count >= minIntermediateResults2)
+                   .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsLoss) && 
+                               x.IntermediateResults.Skip(firstN).SkipLast(lastN).Any(y => y.IsProfit) &&
+                               x.IntermediateResults.TakeLast(lastN).Any(y => y.IsLoss)
+                   );
+
+                // (+-+) profit postion goes loss and then back profit
+                int profitPositionGoestLossAndThenBackProfitCount = strategyRunSummary.Results
+                   .Where(x => x.IntermediateResults.Count >= minIntermediateResults2)
+                   .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsProfit) &&
+                               x.IntermediateResults.Skip(firstN).SkipLast(lastN).Any(y => y.IsLoss) &&
+                               x.IntermediateResults.TakeLast(lastN).Any(y => y.IsProfit)
+                   );
+
+                // postion closed by takeproft very fast
+                int positionClosedByTakeprofitVeryFast = strategyRunSummary.Results
+                    .Count(x => x.IsClosedByTakeProfit && x.PositionDurationInBars <= veryFastPositionMaxDurationInBars);
+
+                // postion closed by stoploss very fast
+                int positionClosedByStoplossVeryFast = strategyRunSummary.Results
+                    .Count(x => x.IsClosedByStopLoss && x.PositionDurationInBars <= veryFastPositionMaxDurationInBars);
+
+                // ===============================================================================================================================
+                var profitMaxPercents = new (decimal, decimal)[] 
+                {
+                    (0m, 0.01m),
+                    (0.01m, 0.02m),
+                    (0.02m, 0.03m),
+                    (0.03m, 0.04m),
+                    (0.04m, 0.05m),
+                    (0.05m, 0.06m),
+                    (0.06m, 0.07m),
+                };
+                var lossMaxPercents = profitMaxPercents.Select(x => (x.Item1 == 0 ? 0 : x.Item1 * -1, x.Item2 == 0 ? 0 : x.Item2 * -1)).ToArray();
+
+                // profit position at the start with pnl % > N goes profit
+                var profitPositionWithPercentPercentGoesProfitCount = profitMaxPercents.Select(percent =>
+                {
+                    int count = strategyRunSummary.Results
+                       .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                       .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsProfit && y.PnlPercent >= percent.Item1 && y.PnlPercent < percent.Item2) &&
+                                   x.IntermediateResults.TakeLast(lastN).Any(y => y.IsProfit)
+                       );
+                    return new { Percent = percent, Count = count, };
+                }).ToList();
+                
+                // profit position at the start with pnl % > N goes loss
+                var profitPositionWithPercentPercentGoesLossCount = profitMaxPercents.Select(percent =>
+                {
+                    int count = strategyRunSummary.Results
+                       .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                       .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsProfit && y.PnlPercent >= percent.Item1 && y.PnlPercent < percent.Item2) &&
+                                   x.IntermediateResults.TakeLast(lastN).Any(y => y.IsLoss)
+                       );
+                    return new { Percent = percent, Count = count, };
+                }).ToList();
+
+                // loss position at the start with pnl % < N goes loss
+                var lossPositionWithPercentPercentGoesLossCount = lossMaxPercents.Select(percent =>
+                {
+                    int count = strategyRunSummary.Results
+                       .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                       .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsLoss && y.PnlPercent <= percent.Item1 && y.PnlPercent > percent.Item2) &&
+                                   x.IntermediateResults.TakeLast(lastN).Any(y => y.IsLoss)
+                       );
+                    return new { Percent = percent, Count = count, };
+                }).ToList();
+
+                // loss position at the start with pnl % < N goes profit
+                var lossPositionWithPercentPercentGoesProfitCount = lossMaxPercents.Select(percent =>
+                {
+                    int count = strategyRunSummary.Results
+                       .Where(x => x.IntermediateResults.Count >= minIntermediateResults1)
+                       .Count(x => x.IntermediateResults.Take(firstN).Any(y => y.IsLoss && y.PnlPercent <= percent.Item1 && y.PnlPercent > percent.Item2) &&
+                                   x.IntermediateResults.TakeLast(lastN).Any(y => y.IsProfit)
+                       );
+                    return new { Percent = percent, Count = count, };
+                }).ToList();
+
+            }
         }
 
         #region Private

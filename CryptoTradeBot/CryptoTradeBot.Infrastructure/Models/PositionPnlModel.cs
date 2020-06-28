@@ -18,5 +18,8 @@ namespace CryptoTradeBot.Infrastructure.Models
         /// Balance after closing position
         /// </summary>
         public decimal QuoteAssetAmountAfter { get; set; }
+
+        public bool IsProfit => Pnl > 0;
+        public bool IsLoss => Pnl <= 0;
     }
 }

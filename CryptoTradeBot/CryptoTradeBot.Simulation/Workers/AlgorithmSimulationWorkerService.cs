@@ -1310,6 +1310,10 @@ namespace CryptoTradeBot.Simulation.Workers
                 return coveringBar != null;
             };
 
+            DateTime from = DateTime.UtcNow.Subtract(TimeSpan.FromDays(3 * 30));
+            DateTime to = DateTime.UtcNow;
+            var barChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h");
+
             const int nPrevBarsToSearchCoveringBar = 12; // 2 days
 
             var strategyRunner = _serviceProvider.GetRequiredService<StrategyRunnerService>();
@@ -1323,24 +1327,52 @@ namespace CryptoTradeBot.Simulation.Workers
                         new AssetToTestSettings()
                         {
                             Symbol = "BTCUSDT",
-                            From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(3 * 30)),
-                            To = DateTime.UtcNow,
-                            BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
                         },
-                        //new AssetToTestSettings()
-                        //{
-                        //    Symbol = "IOTAUSDT",
-                        //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
-                        //    To = DateTime.UtcNow,
-                        //    BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
-                        //},
-                        //new AssetToTestSettings()
-                        //{
-                        //    Symbol = "DASHUSDT",
-                        //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
-                        //    To = DateTime.UtcNow,
-                        //    BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
-                        //},
+                        new AssetToTestSettings()
+                        {
+                            Symbol = "ETHUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
+                        new AssetToTestSettings()
+                        {
+                            Symbol = "LTCUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
+                        new AssetToTestSettings()
+                        {
+                            Symbol = "IOTAUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
+                        new AssetToTestSettings()
+                        {
+                            Symbol = "DASHUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
+                        new AssetToTestSettings()
+                        {
+                            Symbol = "ADAUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
+                         new AssetToTestSettings()
+                        {
+                            Symbol = "XRPUSDT",
+                            From = from,
+                            To = to,
+                            BarChartIntervalConfig = barChartIntervalConfig,
+                        },
                     },
                     OrderDirections = new List<OrderDirection>()
                     {
@@ -1357,7 +1389,7 @@ namespace CryptoTradeBot.Simulation.Workers
                     MaxDrawdownPercent = 0.5m,
                     MaxStoplossPercent = 0.05m,
                     MaxTakeprofitPercent = 0.25m,
-                    InitialBalance = 1000,
+                    InitialBalance = 10000,
                     BalancePerTradePercent = 1m,
                     StartBarIndex = 2,
                 })
@@ -1366,7 +1398,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 {
                     MaxPositionOpeningWaitDurationInBars = 5,
                     MaxOpenPositionDurationInBars = 12,
-                    IsLogIntermediateResults = true,
+                    IsLogIntermediateResults = false,
                     PositionOpeningPredicate = (bars, currentBarIndex, currentBar) =>
                     {
                         if (currentBarIndex < 2)
@@ -1435,16 +1467,14 @@ namespace CryptoTradeBot.Simulation.Workers
 
             var strategyRunSummaries = await strategyRunner.RunAsync();
 
-            // TODO - analyse each trade balance changes from open to close to determine likelyhood of
-            // - loss postion goes profit
-            // - profit position goes loss
-            // - profit position with pnl % > N goes profit or loss
-
             // log summaries
             foreach (var strategyRunSummary in strategyRunSummaries)
             {
                 strategyRunSummary.PrintOutSummary(_logger);
             }
+
+            // get insight on summaries
+            strategyRunner.GetInsights(strategyRunSummaries);
         }
     }
 }
