@@ -54,7 +54,7 @@ namespace CryptoTradeBot.StrategyRunner.Settings
         /// Indicates percent of the balance that can be used to open positions.
         /// E.g. 0.7 means using max 70% of current balance for trades, while 30% is reserved.
         /// </summary>
-        public decimal BalancePerTradePercent { get; set; }
+        public decimal? BalancePerTradePercent { get; set; }
 
         /// <summary>
         /// First bar index to run strategy

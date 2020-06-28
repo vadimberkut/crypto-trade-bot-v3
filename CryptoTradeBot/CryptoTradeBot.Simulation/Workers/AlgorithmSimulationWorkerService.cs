@@ -1360,7 +1360,7 @@ namespace CryptoTradeBot.Simulation.Workers
                     MaxStoplossPercent = 0.05m,
                     MaxTakeprofitPercent = 0.25m,
                     InitialBalance = 1000,
-                    BalancePerTradePercent = 1m, // TODO
+                    BalancePerTradePercent = 1m,
                     StartBarIndex = 2,
                 })
                 .WithMarketHistoryDataSource(marketHistoryDataSource)

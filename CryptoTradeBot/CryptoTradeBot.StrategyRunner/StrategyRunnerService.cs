@@ -90,24 +90,13 @@ namespace CryptoTradeBot.StrategyRunner
         public decimal ClosePrice { get; set; }
     }
 
-    public class PositionPnlModel
-    {
-        public decimal Pnl { get; set; }
-        public decimal PnlPercent { get; set; }
-
-        /// <summary>
-        /// Balance before opening position
-        /// </summary>
-        public decimal QuoteAssetAmountBefore { get; set; }
-
-        /// <summary>
-        /// Balance after closing position
-        /// </summary>
-        public decimal QuoteAssetAmountAfter { get; set; }
-    }
-
     public class CurrentPositionModel
     {
+        public CurrentPositionModel()
+        {
+            IntermediateResults = new List<PositionPnlModel>();
+        }
+
         public OrderDirection OrderDirection { get; set; }
         public OrderType OrderType { get; set; }
         public decimal QuoteAssetAmountBefore { get; set; }
@@ -117,6 +106,7 @@ namespace CryptoTradeBot.StrategyRunner
         public int PositionDurationInBars { get; set; }
         public int PositionOpenBarIndex { get; set; }
         public GeneralBarModel PositionOpenBar { get; set; }
+        public List<PositionPnlModel> IntermediateResults { get; set; }
     }
 
     public class StrategyRunnerService
@@ -247,17 +237,26 @@ namespace CryptoTradeBot.StrategyRunner
                             // position opened
                             _status = StrategyRunnerStatus.OpenedPosition;
                             positionWaitOpeningDurationInBars = 0;
+
+                            // use specified % of balance in trades
+                            decimal balanceForPosition = _currentBalance;
+                            if (_settings.BalancePerTradePercent != null)
+                            {
+                                balanceForPosition = _currentBalance * _settings.BalancePerTradePercent.Value;
+                            }
+
                             _currentPosition = new CurrentPositionModel()
                             {
                                 OrderDirection = positionOpeningDetails.OrderDirection,
                                 OrderType = positionOpeningDetails.OrderType,
-                                QuoteAssetAmountBefore = _currentBalance,
+                                QuoteAssetAmountBefore = balanceForPosition,
                                 OpenPrice = positionOpeningDetails.OpenPrice,
                                 StoplossPrice = positionOpeningDetails.StoplossPrice,
                                 TakeprofitPrice = positionOpeningDetails.TakeprofitPrice,
                                 PositionDurationInBars = 0,
                                 PositionOpenBarIndex = currentBarIndex,
                                 PositionOpenBar = currentBar,
+                                IntermediateResults = new List<PositionPnlModel>(),
                             };
 
                             // don't process current bar. check stoploss and takeprofit only on next bar
@@ -322,6 +321,9 @@ namespace CryptoTradeBot.StrategyRunner
                         }
                         var pnlModel = this.CalcCurrentPositionPnl(longPositionClosePrice.Value);
 
+                        // save intermediate results
+                        _currentPosition.IntermediateResults.Add(pnlModel);
+
                         // log
                         if (_strategyDefinition.IsLogIntermediateResults)
                         {
@@ -352,7 +354,10 @@ namespace CryptoTradeBot.StrategyRunner
                         // position closed
                         if (isClosed)
                         {
-                            _currentBalance = pnlModel.QuoteAssetAmountAfter;
+                            // update balance
+                            //_currentBalance = pnlModel.QuoteAssetAmountAfter;
+                            _currentBalance += pnlModel.Pnl;
+
 
                             var result = new SimpleTradeResultModel
                             {
@@ -366,6 +371,14 @@ namespace CryptoTradeBot.StrategyRunner
                                 IsClosedByEarlyClose = isClosedByEarlyClose,
                                 PositionDurationInBars = _currentPosition.PositionDurationInBars,
                                 PositionDuration = _currentPosition.PositionDurationInBars * assetToTest.BarChartIntervalConfig.TimeSpan,
+                                OrderDirection = _currentPosition.OrderDirection,
+                                OpenOrderType = _currentPosition.OrderType,
+                                CloseOrderType = OrderType.Market, // TODO
+                                OpenPrice = _currentPosition.OpenPrice,
+                                ClosePrice = longPositionClosePrice.Value,
+                                OpenedAt = _currentPosition.PositionOpenBar.OpenTime,
+                                ClosedAt = currentBar.CloseTime,
+                                IntermediateResults = _currentPosition.IntermediateResults,
                             };
                             results.Add(result);
 

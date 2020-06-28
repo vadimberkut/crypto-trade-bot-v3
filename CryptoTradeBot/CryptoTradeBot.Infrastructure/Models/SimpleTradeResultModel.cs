@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CryptoTradeBot.Infrastructure.Enums;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -17,5 +18,19 @@ namespace CryptoTradeBot.Infrastructure.Models
         public bool IsClosedByEarlyClose { get; set; }
         public int PositionDurationInBars { get; set; }
         public TimeSpan PositionDuration { get; set; }
+
+        public OrderDirection OrderDirection { get; set; }
+        public OrderType OpenOrderType { get; set; }
+        public OrderType CloseOrderType { get; set; }
+        public decimal OpenPrice { get; set; }
+        public decimal ClosePrice { get; set; }
+        public DateTime OpenedAt { get; set; }
+        public DateTime ClosedAt { get; set; }
+
+        /// <summary>
+        /// Intermediate results during position was opened.
+        /// E.g. opened on bar 450 closed on 460. List contains 10 records with intermediate pnl.
+        /// </summary>
+        public List<PositionPnlModel> IntermediateResults { get; set; }
     }
 }
