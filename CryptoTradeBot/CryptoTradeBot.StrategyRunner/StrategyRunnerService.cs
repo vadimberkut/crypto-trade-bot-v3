@@ -55,8 +55,21 @@ namespace CryptoTradeBot.StrategyRunner
         #endregion
 
 
+        /// <summary>
+        /// Runs strategy
+        /// </summary>
         public async Task<IEnumerable<StrategyRunSummaryModel>> RunAsync()
         {
+            // validation
+            if(
+                _settings == null ||
+                _marketHistoryDataSource == null ||
+                _strategyDefinition == null
+            )
+            {
+                throw new Exception("Check you configured Strategy Runner properly with Fluent API!");
+            }
+
             var runSummary = new List<StrategyRunSummaryModel>();
 
             foreach (var assetToTest in _settings.AssetsToTest)
@@ -313,6 +326,16 @@ namespace CryptoTradeBot.StrategyRunner
             return runSummary;
         }
 
+        public void GetInsights(IEnumerable<StrategyRunSummaryModel> strategyRunSummaries)
+        {
+
+        }
+
+        #region Private
+
+        /// <summary>
+        /// Calculates pnl for provided position
+        /// </summary>
         private PositionPnlModel CalcPositionPnl(CurrentPositionModel currentPosition, decimal closePrice)
         {
             // TODO
@@ -340,9 +363,14 @@ namespace CryptoTradeBot.StrategyRunner
             };
         }
 
+        /// <summary>
+        /// Calculates pnl for current open position
+        /// </summary>
         public PositionPnlModel CalcCurrentPositionPnl(decimal closePrice)
         {
             return this.CalcPositionPnl(_currentPosition, closePrice);
         }
+
+        #endregion
     }
 }

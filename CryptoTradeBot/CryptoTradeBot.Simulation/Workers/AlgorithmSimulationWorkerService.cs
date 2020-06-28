@@ -32,6 +32,7 @@ using CryptoTradeBot.StrategyRunner.Settings;
 using CryptoTradeBot.StrategyRunner.Interfaces;
 using CryptoTradeBot.Infrastructure.Enums;
 using CryptoTradeBot.StrategyRunner.Enums;
+using CryptoTradeBot.StrategyRunner.Models;
 
 namespace CryptoTradeBot.Simulation.Workers
 {
