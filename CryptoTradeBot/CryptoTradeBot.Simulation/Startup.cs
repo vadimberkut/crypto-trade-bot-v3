@@ -8,7 +8,10 @@ using CryptoTradeBot.Exchanges.Binance.Stores;
 using CryptoTradeBot.Host.Exchanges.Binance.Clients;
 using CryptoTradeBot.Host.Exchanges.Binance.Utils;
 using CryptoTradeBot.Infrastructure.Utils;
+using CryptoTradeBot.Simulation.Implementations;
 using CryptoTradeBot.Simulation.Workers;
+using CryptoTradeBot.StrategyRunner;
+using CryptoTradeBot.StrategyRunner.Interfaces;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc;
@@ -61,6 +64,10 @@ namespace CryptoTradeBot.Simulation
             services.AddSingleton<BinanceExchangeUtil>();
             services.AddTransient<WssBookDepthHandler>();
             services.AddSingleton<OrderBookStore>();
+
+            // strategy runner and its dependencies
+            services.AddTransient<StrategyRunnerService>();
+            services.AddTransient<IMarketHistoryDataSource, BinanceMarketHistoryDataSource>();
 
             services.AddControllers();
         }

@@ -85,7 +85,7 @@ namespace CryptoTradeBot.Host.Exchanges.Binance.Clients
             // as Binance allows max 1000 items to request, but date range could be huge (e.g. 1 year of 1h intervals)
             if (from.Value != null && to.Value != null)
             {
-                var candlestickIntervalConfig = BinanceConfig.GetCandlestickChartInterval(candlestickInterval);
+                var candlestickIntervalConfig = BinanceConfig.GetBarChartInterval(candlestickInterval);
                 TimeSpan requestedRange = to.Value.Subtract(from.Value);
                 int candlestickIntervalsInDateRange = Convert.ToInt32(Math.Round(requestedRange.TotalMilliseconds / candlestickIntervalConfig.TimeSpan.TotalMilliseconds, 0));
 

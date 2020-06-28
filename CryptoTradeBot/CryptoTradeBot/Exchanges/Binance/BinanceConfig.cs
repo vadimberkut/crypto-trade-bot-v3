@@ -1,4 +1,5 @@
-﻿using System;
+﻿using CryptoTradeBot.Infrastructure.Models;
+using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Threading.Tasks;
@@ -137,88 +138,88 @@ namespace CryptoTradeBot.WebHost.Exchanges.Binance
         /// <summary>
         /// https://github.com/binance-exchange/binance-official-api-docs/blob/master/rest-api.md
         /// </summary>
-        public static List<BinanceCandlestickChartIntervalConfig> CandlestickChartIntervals = new List<BinanceCandlestickChartIntervalConfig>
+        public static List<BarChartIntervalConfig> BarChartIntervals = new List<BarChartIntervalConfig>
         {
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "1m",
                 TimeSpan = TimeSpan.FromMinutes(1),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "3m",
                 TimeSpan = TimeSpan.FromMinutes(3),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "5m",
                 TimeSpan = TimeSpan.FromMinutes(5),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "15m",
                 TimeSpan = TimeSpan.FromMinutes(15),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "30m",
                 TimeSpan = TimeSpan.FromMinutes(30),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "1h",
                 TimeSpan = TimeSpan.FromHours(1),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "2h",
                 TimeSpan = TimeSpan.FromHours(2),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "4h",
                 TimeSpan = TimeSpan.FromHours(4),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "6h",
                 TimeSpan = TimeSpan.FromHours(6),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "8h",
                 TimeSpan = TimeSpan.FromHours(8),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "12h",
                 TimeSpan = TimeSpan.FromHours(12),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "1d",
                 TimeSpan = TimeSpan.FromDays(1),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "3d",
                 TimeSpan = TimeSpan.FromDays(3),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "1w",
                 TimeSpan = TimeSpan.FromDays(7),
             },
-            new BinanceCandlestickChartIntervalConfig()
+            new BarChartIntervalConfig()
             {
                 Name = "1M",
                 TimeSpan = TimeSpan.FromDays(30), // roughly assume 30 days
             },
         };
 
-        public static BinanceCandlestickChartIntervalConfig GetCandlestickChartInterval(string name)
+        public static BarChartIntervalConfig GetBarChartInterval(string name)
         {
-            var config = CandlestickChartIntervals.FirstOrDefault(x => x.Name == name);
+            var config = BarChartIntervals.FirstOrDefault(x => x.Name == name);
             if(config == null)
             {
                 throw new ArgumentException();
@@ -226,11 +227,4 @@ namespace CryptoTradeBot.WebHost.Exchanges.Binance
             return config;
         }
     }
-
-    public class BinanceCandlestickChartIntervalConfig
-    {
-        public string Name { get; set; }
-        public TimeSpan TimeSpan { get; set; }
-    }
-
 }

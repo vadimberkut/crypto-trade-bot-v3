@@ -25,8 +25,13 @@ using CryptoTradeBot.Host.Interfaces;
 using CryptoTradeBot.Host.Exchanges.Binance.Utils;
 using CryptoTradeBot.WebHost.Algorithms.CirclePathAlgorithm.Models;
 using CryptoTradeBot.Infrastructure.Extensions;
-using CryptoTradeBot.Simulation.Models;
 using CryptoTradeBot.WebHost.Exchanges.Binance;
+using CryptoTradeBot.Infrastructure.Models;
+using CryptoTradeBot.StrategyRunner;
+using CryptoTradeBot.StrategyRunner.Settings;
+using CryptoTradeBot.StrategyRunner.Interfaces;
+using CryptoTradeBot.Infrastructure.Enums;
+using CryptoTradeBot.StrategyRunner.Enums;
 
 namespace CryptoTradeBot.Simulation.Workers
 {
@@ -206,7 +211,7 @@ namespace CryptoTradeBot.Simulation.Workers
             _logger.LogInformation($"Solution total: profit={totalEstimatedProfit}, profit USDT={totalEstimatedProfitUsdt}.");
         }
 
-        private async Task<GeneralSymbolCandlestickHistoryModel> BinanceLoadSymbolCandlestickHistory(string symbol, DateTime from, DateTime to, string candlestickInterval)
+        private async Task<GeneralSymbolBarHistoryModel> BinanceLoadSymbolCandlestickHistory(string symbol, DateTime from, DateTime to, string candlestickInterval)
         {
             var binanceHttpClient = this._serviceProvider.GetRequiredService<BinanceHttpClient>();
 
@@ -231,12 +236,12 @@ namespace CryptoTradeBot.Simulation.Workers
                     candlestickInterval
                 )
             );
-            GeneralSymbolCandlestickHistoryModel symbolCandlestickHistory;
+            GeneralSymbolBarHistoryModel symbolCandlestickHistory;
             if (File.Exists(candlestickDataFilePath))
             {
                 _logger.LogInformation($"Loading from file...");
                 string content = File.ReadAllText(candlestickDataFilePath);
-                symbolCandlestickHistory = JsonConvert.DeserializeObject<GeneralSymbolCandlestickHistoryModel>(content);
+                symbolCandlestickHistory = JsonConvert.DeserializeObject<GeneralSymbolBarHistoryModel>(content);
             }
             else
             {
@@ -244,13 +249,13 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 // TODO: split from-to on intervals according to limit and CandlestickInterval
                 var dto = await binanceHttpClient.GetCandlestickDataAsync(symbol, candlestickInterval, from, to, 1000);
-                symbolCandlestickHistory = new GeneralSymbolCandlestickHistoryModel()
+                symbolCandlestickHistory = new GeneralSymbolBarHistoryModel()
                 {
                     Symbol = symbol,
                     From = from,
                     To = to,
-                    CandlestickInterval = candlestickInterval,
-                    Candles = dto.Candles.OrderBy(x => x.OpenTime).Select(x => new GeneralCandlestickModel()
+                    BarInterval = candlestickInterval,
+                    Bars = dto.Candles.OrderBy(x => x.OpenTime).Select(x => new GeneralBarModel()
                     {
                         OpenTime = x.OpenTime,
                         CloseTime = x.CloseTime,
@@ -294,7 +299,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 var symbolCandlestickHistory = await BinanceLoadSymbolCandlestickHistory(assetToTest.Symbol, assetToTest.From, assetToTest.To, assetToTest.CandlestickInterval);
 
                 // test
-                int length = symbolCandlestickHistory.Candles.Count;
+                int length = symbolCandlestickHistory.Bars.Count;
                 const decimal volatilityRangeEntryPercent = 0.5m;
                 decimal? volatilityRangeStopLossPercent = null; // null - no stop loss 
                 decimal initialQuoteAssetAmount = 1000; // in quote asset. E.g. BTCUSDT 1000USDT
@@ -305,10 +310,10 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 for (int i = 5; i < length - 1; i++)
                 {
-                    var prevCandle3Days = symbolCandlestickHistory.Candles[i - 3];
-                    var prevCandle = symbolCandlestickHistory.Candles[i - 1];
-                    var currentCandle = symbolCandlestickHistory.Candles[i];
-                    var nextCandle = symbolCandlestickHistory.Candles[i + 1];
+                    var prevCandle3Days = symbolCandlestickHistory.Bars[i - 3];
+                    var prevCandle = symbolCandlestickHistory.Bars[i - 1];
+                    var currentCandle = symbolCandlestickHistory.Bars[i];
+                    var nextCandle = symbolCandlestickHistory.Bars[i + 1];
 
                     // calc position volatilityRange
                     Func<decimal> getVolatilityRangeWithSimpleStrategy = () =>
@@ -404,7 +409,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 }
 
                 // stats
-                int candlesCountCount = symbolCandlestickHistory.Candles.Count;
+                int candlesCountCount = symbolCandlestickHistory.Bars.Count;
                 int tradesCount = testResults.Count;
                 int profitTradesCount = testResults.Count(x => x.Pnl > 0);
                 int lossTradesCount = testResults.Count(x => x.Pnl <= 0);
@@ -516,7 +521,7 @@ namespace CryptoTradeBot.Simulation.Workers
 
 
                 // test
-                int length = symbolCandlestickHistory.Candles.Count;
+                int length = symbolCandlestickHistory.Bars.Count;
 
                 const int maxPositionOpenCheckDurationInBars = 3; // how long to wait after open signal was received. when expired - cancel ([bar condition true; current bar])
                 const int maxOpenPositionDurationInBars = 15; // how long to keep opened position if neither stoploss and takeprofit was hit ([bar opened; bar when closing])
@@ -538,20 +543,20 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 for (int i = 1; i < length - 1; i++)
                 {
-                    var prevCandle = symbolCandlestickHistory.Candles[i - 1];
-                    var currentCandle = symbolCandlestickHistory.Candles[i];
-                    var nextCandle = symbolCandlestickHistory.Candles[i + 1];
+                    var prevCandle = symbolCandlestickHistory.Bars[i - 1];
+                    var currentCandle = symbolCandlestickHistory.Bars[i];
+                    var nextCandle = symbolCandlestickHistory.Bars[i + 1];
 
                     // check whether current bar is striking bar
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkBuy1StrikingBar = (_prevBar, _currentBar) =>
+                    Func<GeneralBarModel, GeneralBarModel, bool> checkBuy1StrikingBar = (_prevBar, _currentBar) =>
                     {
                         return _currentBar.ClosePrice < _prevBar.LowPrice;
                     };
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkSell1StrikingBar = (_prevBar, _currentBar) =>
+                    Func<GeneralBarModel, GeneralBarModel, bool> checkSell1StrikingBar = (_prevBar, _currentBar) =>
                     {
                         return _currentBar.ClosePrice > _prevBar.HighPrice;
                     };
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkBuy2StrikingBar = (_prevBar, _currentBar) =>
+                    Func<GeneralBarModel, GeneralBarModel, bool> checkBuy2StrikingBar = (_prevBar, _currentBar) =>
                     {
                         const decimal inRangeFromHighPercent = 0.25m;
                         decimal rangeStart = _currentBar.LowPrice;
@@ -560,7 +565,7 @@ namespace CryptoTradeBot.Simulation.Workers
                                _currentBar.ClosePrice >= rangeStart && _currentBar.ClosePrice <= rangeEnd; 
                                //_currentBar.ClosePrice <= _currentBar.OpenPrice; // optional
                     };
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, bool> checkSell2StrikingBar = (_prevBar, _currentBar) =>
+                    Func<GeneralBarModel, GeneralBarModel, bool> checkSell2StrikingBar = (_prevBar, _currentBar) =>
                     {
                         const decimal inRangeFromHighPercent = 0.25m;
                         decimal rangeStart = _currentBar.HighPrice - (_currentBar.HighPrice - _currentBar.LowPrice) * inRangeFromHighPercent;
@@ -689,7 +694,7 @@ namespace CryptoTradeBot.Simulation.Workers
                             var pnlTuple = calcPositionPnl("long", currentQuoteAssetAmount, longPositionOpenPrice, longPositionClosePrice, makerFeePercent);
                             currentQuoteAssetAmount = pnlTuple.quoteAssetAmountAfter;
 
-                            var candlestickIntervalConfig = BinanceConfig.GetCandlestickChartInterval(assetToTest.CandlestickInterval);
+                            var candlestickIntervalConfig = BinanceConfig.GetBarChartInterval(assetToTest.CandlestickInterval);
 
                             var result = new SimpleTradeResultModel
                             {
@@ -699,7 +704,7 @@ namespace CryptoTradeBot.Simulation.Workers
                                 IsClosedByStopLoss = isClosedByStopLoss,
                                 IsClosedByTakeProfit = isClosedByTakeProfit,
                                 IsClosedByDurationTimeout = isClosedByDurationTimeout,
-                                InPositionDuration = positionDurationInBars * candlestickIntervalConfig.TimeSpan,
+                                PositionDuration = positionDurationInBars * candlestickIntervalConfig.TimeSpan,
                             };
                             testResults.Add(result);
 
@@ -740,7 +745,7 @@ namespace CryptoTradeBot.Simulation.Workers
                 var lossTrades = testResults.Where(x => x.Pnl <= 0);
 
                 // stats
-                int barsCount = symbolCandlestickHistory.Candles.Count;
+                int barsCount = symbolCandlestickHistory.Bars.Count;
                 int tradesCount = testResults.Count;
                 int profitTradesCount = profitTrades.Count();
                 int lossTradesCount = lossTrades.Count();
@@ -778,12 +783,12 @@ namespace CryptoTradeBot.Simulation.Workers
                     return prev;
                 }).max;
                 
-                TimeSpan minOpenProfitPositionDuration = profitTrades.Min(x => x.InPositionDuration);
-                TimeSpan avgerageOpenProfitPositionDuration = TimeSpan.FromSeconds(profitTrades.Average(x => x.InPositionDuration.TotalSeconds));
-                TimeSpan maxOpenProfitPositionDuration = profitTrades.Max(x => x.InPositionDuration);
-                TimeSpan minOpenLossPositionDuration = lossTrades.Min(x => x.InPositionDuration);
-                TimeSpan avgerageOpenLossPositionDuration = TimeSpan.FromSeconds(lossTrades.Average(x => x.InPositionDuration.TotalSeconds));
-                TimeSpan maxOpenLossPositionDuration = lossTrades.Max(x => x.InPositionDuration);
+                TimeSpan minOpenProfitPositionDuration = profitTrades.Min(x => x.PositionDuration);
+                TimeSpan avgerageOpenProfitPositionDuration = TimeSpan.FromSeconds(profitTrades.Average(x => x.PositionDuration.TotalSeconds));
+                TimeSpan maxOpenProfitPositionDuration = profitTrades.Max(x => x.PositionDuration);
+                TimeSpan minOpenLossPositionDuration = lossTrades.Min(x => x.PositionDuration);
+                TimeSpan avgerageOpenLossPositionDuration = TimeSpan.FromSeconds(lossTrades.Average(x => x.PositionDuration.TotalSeconds));
+                TimeSpan maxOpenLossPositionDuration = lossTrades.Max(x => x.PositionDuration);
 
                 decimal minProfit = Math.Round(profitTrades.Min(x => x.Pnl), 2);
                 decimal averageProfit = Math.Round(profitTrades.Aggregate(0m, (avg, x) => avg + (x.Pnl / testResults.Count)), 2);
@@ -854,7 +859,7 @@ namespace CryptoTradeBot.Simulation.Workers
         /// </summary>
         /// <param name="cancellationToken"></param>
         /// <returns></returns>
-        private async Task StartCustomNestedBarBreakthroughSimulationAsync(CancellationToken cancellationToken)
+        private async Task MANUAL_StartCustomNestedBarBreakthroughSimulationAsync(CancellationToken cancellationToken)
         {
             const string strategyName = "CustomNestedBarBreakthrough";
 
@@ -911,7 +916,7 @@ namespace CryptoTradeBot.Simulation.Workers
 
 
                 // test
-                int length = symbolCandlestickHistory.Candles.Count;
+                int length = symbolCandlestickHistory.Bars.Count;
 
                 const decimal coveringBarRangeCanBeGreaterThanNestedBarRangePercent = 0.25m;
 
@@ -937,12 +942,12 @@ namespace CryptoTradeBot.Simulation.Workers
 
                 for (int i = 2; i < length - 1; i++)
                 {
-                    var beforePrevBar = symbolCandlestickHistory.Candles[i - 2]; // supposed to be covering bar
-                    var prevBar = symbolCandlestickHistory.Candles[i - 1]; // supposed to be nested bar
-                    var currentBar = symbolCandlestickHistory.Candles[i]; // current bar when condition is checked
+                    var beforePrevBar = symbolCandlestickHistory.Bars[i - 2]; // supposed to be covering bar
+                    var prevBar = symbolCandlestickHistory.Bars[i - 1]; // supposed to be nested bar
+                    var currentBar = symbolCandlestickHistory.Bars[i]; // current bar when condition is checked
 
-                    // check whether current bar is striking bar
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, GeneralCandlestickModel, bool> checkIsNestedBar = (_beforePrevBar, _prevBar, _currentBar) =>
+                    // check whether current bar is nested bar
+                    Func<GeneralBarModel, GeneralBarModel, GeneralBarModel, bool> checkIsNestedBar = (_beforePrevBar, _prevBar, _currentBar) =>
                     {
                         decimal coveringBarRange = _beforePrevBar.HighPrice - _beforePrevBar.LowPrice;
                         decimal nestedBarRange = _prevBar.HighPrice - _prevBar.LowPrice;
@@ -950,12 +955,6 @@ namespace CryptoTradeBot.Simulation.Workers
                                _beforePrevBar.LowPrice <= _prevBar.LowPrice &&
                                // check covering bar range isn't too big
                                coveringBarRange >= (nestedBarRange + nestedBarRange * coveringBarRangeCanBeGreaterThanNestedBarRangePercent);
-                    };
-                    Func<GeneralCandlestickModel, GeneralCandlestickModel, GeneralCandlestickModel, bool> checkBuyNestedBar = (_beforePrevBar, _prevBar, _currentBar) =>
-                    {
-                        decimal coveringBarRange = _beforePrevBar.HighPrice - _beforePrevBar.LowPrice;
-                        decimal coveringBarRangePercent = 0.1m;
-                        return _currentBar.HighPrice > (_beforePrevBar.HighPrice + coveringBarRange * coveringBarRangePercent);
                     };
 
                     if (positionStatus == "NoPosition")
@@ -1017,6 +1016,7 @@ namespace CryptoTradeBot.Simulation.Workers
                         {
                             positionStatus = "NoPosition";
                             positionCheckingOpenConditionDurationInBars = 0;
+                            continue;
                         }
 
                         // check for position open condition
@@ -1107,7 +1107,7 @@ namespace CryptoTradeBot.Simulation.Workers
                             var pnlTuple = calcPositionPnl("long", currentQuoteAssetAmount, longPositionOpenPrice, longPositionClosePrice, makerFeePercent);
                             currentQuoteAssetAmount = pnlTuple.quoteAssetAmountAfter;
 
-                            var candlestickIntervalConfig = BinanceConfig.GetCandlestickChartInterval(assetToTest.CandlestickInterval);
+                            var candlestickIntervalConfig = BinanceConfig.GetBarChartInterval(assetToTest.CandlestickInterval);
 
                             var result = new SimpleTradeResultModel
                             {
@@ -1117,7 +1117,7 @@ namespace CryptoTradeBot.Simulation.Workers
                                 IsClosedByStopLoss = isClosedByStopLoss,
                                 IsClosedByTakeProfit = isClosedByTakeProfit,
                                 IsClosedByDurationTimeout = isClosedByDurationTimeout,
-                                InPositionDuration = positionDurationInBars * candlestickIntervalConfig.TimeSpan,
+                                PositionDuration = positionDurationInBars * candlestickIntervalConfig.TimeSpan,
                             };
                             testResults.Add(result);
 
@@ -1158,17 +1158,20 @@ namespace CryptoTradeBot.Simulation.Workers
                 var lossTrades = testResults.Where(x => x.Pnl <= 0);
 
                 // stats
-                int barsCount = symbolCandlestickHistory.Candles.Count;
+                int barsCount = symbolCandlestickHistory.Bars.Count;
                 int tradesCount = testResults.Count;
                 int profitTradesCount = profitTrades.Count();
                 int lossTradesCount = lossTrades.Count();
+                
                 decimal profitTradesPercent = Math.Round((decimal)profitTradesCount / (decimal)tradesCount, 2);
                 decimal lossTradesPercent = Math.Round((decimal)lossTradesCount / (decimal)tradesCount, 2);
+                
                 int closedByStopLossTradesCount = testResults.Count(x => x.IsClosedByStopLoss);
                 int closedByTakeProfitTradesCount = testResults.Count(x => x.IsClosedByTakeProfit);
                 int closedByDurationTimeoutTradesCount = testResults.Count(x => x.IsClosedByDurationTimeout);
                 int closedByDurationTimeoutProfitTradesCount = profitTrades.Count(x => x.IsClosedByDurationTimeout);
                 int closedByDurationTimeoutLossTradesCount = lossTrades.Count(x => x.IsClosedByDurationTimeout);
+                
                 int maxProfitTradesInARow = testResults.Select(x => (item: x, currentCount: 0, max: 0)).Aggregate((prev, curr) =>
                 {
                     if (curr.item.Pnl > 0)
@@ -1196,12 +1199,12 @@ namespace CryptoTradeBot.Simulation.Workers
                     return prev;
                 }).max;
 
-                TimeSpan minOpenProfitPositionDuration = profitTrades.Min(x => x.InPositionDuration);
-                TimeSpan avgerageOpenProfitPositionDuration = TimeSpan.FromSeconds(profitTrades.Average(x => x.InPositionDuration.TotalSeconds));
-                TimeSpan maxOpenProfitPositionDuration = profitTrades.Max(x => x.InPositionDuration);
-                TimeSpan minOpenLossPositionDuration = lossTrades.Min(x => x.InPositionDuration);
-                TimeSpan avgerageOpenLossPositionDuration = TimeSpan.FromSeconds(lossTrades.Average(x => x.InPositionDuration.TotalSeconds));
-                TimeSpan maxOpenLossPositionDuration = lossTrades.Max(x => x.InPositionDuration);
+                TimeSpan minOpenProfitPositionDuration = profitTrades.Min(x => x.PositionDuration);
+                TimeSpan avgerageOpenProfitPositionDuration = TimeSpan.FromSeconds(profitTrades.Average(x => x.PositionDuration.TotalSeconds));
+                TimeSpan maxOpenProfitPositionDuration = profitTrades.Max(x => x.PositionDuration);
+                TimeSpan minOpenLossPositionDuration = lossTrades.Min(x => x.PositionDuration);
+                TimeSpan avgerageOpenLossPositionDuration = TimeSpan.FromSeconds(lossTrades.Average(x => x.PositionDuration.TotalSeconds));
+                TimeSpan maxOpenLossPositionDuration = lossTrades.Max(x => x.PositionDuration);
 
                 decimal minProfit = Math.Round(profitTrades.Min(x => x.Pnl), 2);
                 decimal averageProfit = Math.Round(profitTrades.Aggregate(0m, (avg, x) => avg + (x.Pnl / testResults.Count)), 2);
@@ -1258,6 +1261,191 @@ namespace CryptoTradeBot.Simulation.Workers
                 _logger.LogInformation("");
                 _logger.LogInformation("----------------------------------------------------");
                 _logger.LogInformation("");
+            }
+        }
+
+        private async Task StartCustomNestedBarBreakthroughSimulationAsync(CancellationToken cancellationToken)
+        {
+            // finds covering bar in prev N bars
+            // all subsequent bars must be in a range of the nested bar
+            Func<List<GeneralBarModel>, int, int, (int coveringBarIndex, GeneralBarModel coveringBar)> findCoveringBarInPrevNBars = (_bars, _currentBarIndex, _n) =>
+            {
+                const decimal coveringBarRangeCanBeGreaterThanNestedBarRangePercent = 0.25m;
+
+                int startIndex = Math.Max(_currentBarIndex - _n, 1); // must be at least 1 bar before
+                GeneralBarModel coveringBar = null;
+                int coveringBarIndex = -1;
+                for (int i = startIndex; i < _currentBarIndex; i++)
+                {
+                    var _prevBar = _bars[i - 1];
+                    var _currentBar = _bars[i];
+
+                    if (coveringBar == null)
+                    {
+                        coveringBar = _prevBar; // assume that covering
+                        coveringBarIndex = i - 1;
+                    }
+
+                    decimal coveringBarRange = coveringBar.HighPrice - coveringBar.LowPrice;
+                    decimal nestedBarRange = _currentBar.HighPrice - _currentBar.LowPrice;
+
+                    bool isNestedBar = coveringBar.HighPrice >= _currentBar.HighPrice &&
+                           coveringBar.LowPrice <= _currentBar.LowPrice &&
+                           // check covering bar range isn't too big
+                           coveringBarRange >= (nestedBarRange + nestedBarRange * coveringBarRangeCanBeGreaterThanNestedBarRangePercent);
+
+                    if (!isNestedBar)
+                    {
+                        coveringBar = null;
+                        coveringBarIndex = -1;
+                    }
+                }
+
+                return (coveringBarIndex: coveringBarIndex, coveringBar: coveringBar);
+            };
+
+            // checks whether there is nested bar in prev N bars
+            // all subsequent bars must be in a range of the nested bar
+            Func<List<GeneralBarModel>, int, int, bool> checkIsNestedBarInPrevNBars = (_bars, _currentBarIndex, _n) =>
+            {
+                var (coveringBarIndex, coveringBar) = findCoveringBarInPrevNBars(_bars, _currentBarIndex, _n);
+                return coveringBar != null;
+            };
+
+            const int nPrevBarsToSearchCoveringBar = 12; // 2 days
+
+            var strategyRunner = _serviceProvider.GetRequiredService<StrategyRunnerService>();
+            var marketHistoryDataSource = _serviceProvider.GetRequiredService<IMarketHistoryDataSource>();
+            strategyRunner
+                .WithSettings(new StrategyRunnerSettings()
+                {
+                    StrategyName = "CustomNestedBarBreakthrough",
+                    AssetsToTest = new List<AssetsToTestSettings>()
+                    {
+                        new AssetsToTestSettings()
+                        {
+                            Symbol = "BTCUSDT",
+                            From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(3 * 30)),
+                            To = DateTime.UtcNow,
+                            BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
+                        },
+                        //new AssetsToTestSettings()
+                        //{
+                        //    Symbol = "IOTAUSDT",
+                        //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
+                        //    To = DateTime.UtcNow,
+                        //    BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
+                        //},
+                        //new AssetsToTestSettings()
+                        //{
+                        //    Symbol = "DASHUSDT",
+                        //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
+                        //    To = DateTime.UtcNow,
+                        //    BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
+                        //},
+                    },
+                    OrderDirections = new List<OrderDirection>()
+                    {
+                        OrderDirection.Long,
+                    },
+                    OrderTypes = new List<OrderType>()
+                    {
+                        OrderType.Market,
+                    },
+                    // assume Bittrex with high fees
+                    MakerFeePercent = 0.0025m,
+                    TakerFeePercent = 0.0025m,
+
+                    MaxDrawdownPercent = 0.5m,
+                    MaxStoplossPercent = 0.05m,
+                    MaxTakeprofitPercent = 0.25m,
+                    InitialBalance = 1000,
+                    BalancePerTradePercent = 1m, // TODO
+                    StartBarIndex = 2,
+                })
+                .WithMarketHistoryDataSource(marketHistoryDataSource)
+                .WithStrategyDefinition(new StrategyDefinitionModel()
+                {
+                    MaxPositionOpeningWaitDurationInBars = 5,
+                    MaxOpenPositionDurationInBars = 12,
+                    IsLogIntermediateResults = true,
+                    PositionOpeningPredicate = (bars, currentBarIndex, currentBar) =>
+                    {
+                        if (currentBarIndex < 2)
+                        {
+                            return false;
+                        }
+
+                        var beforePrevBar = bars[currentBarIndex - 2]; // supposed to be covering bar
+                        var prevBar = bars[currentBarIndex - 1]; // supposed to be nested bar
+
+                        // prev 2 bars form nested bar pattern
+                        bool isPrecedingNestedBar = checkIsNestedBarInPrevNBars(bars, currentBarIndex, nPrevBarsToSearchCoveringBar);
+
+                        // current bar closed higher/lower covering bar high/low
+                        // TODO - SHORT
+                        const decimal coveringBarOpenRangePercent = 0.01m;
+                        decimal coveringBarRange = beforePrevBar.HighPrice - beforePrevBar.LowPrice;
+                        bool isCurrentClosedHigher = currentBar.ClosePrice > beforePrevBar.HighPrice + coveringBarRange * coveringBarOpenRangePercent;
+
+                        return isPrecedingNestedBar && isCurrentClosedHigher;
+                    },
+                    PositionOpeningDetailsGetter = (bars, currentBarIndex, currentBar) =>
+                    {
+                        var (coveringBarIndex, coveringBar) = findCoveringBarInPrevNBars(bars, currentBarIndex, nPrevBarsToSearchCoveringBar);
+
+                        const decimal coveringBarStoplossRangePercent = 0.05m;
+                        const decimal coveringBarTakeprofitRangePercent = 5m;
+                        decimal coveringBarRange = coveringBar.HighPrice - coveringBar.LowPrice;
+
+                        // open price - current bar close price
+                        decimal longPositionOpenPrice = currentBar.ClosePrice;
+                        decimal longPositionStoplossPrice = coveringBar.LowPrice - coveringBarRange * coveringBarStoplossRangePercent;
+                        decimal longPositionTakeprofitPrice = coveringBar.HighPrice + coveringBarRange * coveringBarTakeprofitRangePercent;
+
+                        return new PositionOpeningDetailsModel()
+                        {
+                            OrderDirection = OrderDirection.Long,
+                            OrderType = OrderType.Market,
+                            PositionOpenTriggerPriceType = BarPriceType.Close,
+                            OpenPrice = longPositionOpenPrice,
+                            StoplossPrice = longPositionStoplossPrice,
+                            TakeprofitPrice = longPositionTakeprofitPrice,
+                        };
+                    },
+                    PositionEarlyCloseFunc = (bars, currentBarIndex, currentBar, currentPosition, calcCurrentPnlFunc) =>
+                    {
+                        // use bailout exit strategy - close on first profit bar opening
+                        // TODO - recheck this as I enter postion on bar close what is similar to next bar open.
+                        // TODO - looks works as not expected
+                        //if (currentPosition.PositionDurationInBars == 1)
+                        //{
+                        //    decimal closePrice = currentBar.OpenPrice;
+                        //    var pnlModel = calcCurrentPnlFunc(closePrice);
+                        //    if (pnlModel.Pnl > 0)
+                        //    {
+                        //        return new PositionEarlyCloseDetailsModel()
+                        //        {
+                        //            ClosePrice = closePrice,
+                        //        };
+                        //    }
+                        //}
+                        return null;
+                    },
+                })
+                ;
+
+            var strategyRunSummaries = await strategyRunner.RunAsync();
+
+            // TODO - analyse each trade balance changes from open to close to determine likelyhood of
+            // - loss postion goes profit
+            // - profit position goes loss
+            // - profit position with pnl % > N goes profit or loss
+
+            // log summaries
+            foreach (var strategyRunSummary in strategyRunSummaries)
+            {
+                strategyRunSummary.PrintOutSummary(_logger);
             }
         }
     }
