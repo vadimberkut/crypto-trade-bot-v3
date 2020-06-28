@@ -10,13 +10,13 @@ namespace CryptoTradeBot.StrategyRunner.Settings
     {
         public StrategyRunnerSettings()
         {
-            AssetsToTest = new List<AssetsToTestSettings>();
+            AssetsToTest = new List<AssetToTestSettings>();
             OrderDirections = new List<OrderDirection>();
             OrderTypes = new List<OrderType>();
         }
 
         public string StrategyName { get; set; }
-        public List<AssetsToTestSettings> AssetsToTest { get; set; }
+        public List<AssetToTestSettings> AssetsToTest { get; set; }
         public List<OrderDirection> OrderDirections { get; set; }
         public List<OrderType> OrderTypes { get; set; }
 
@@ -62,7 +62,7 @@ namespace CryptoTradeBot.StrategyRunner.Settings
         public int? StartBarIndex { get; set; }
     }
 
-    public class AssetsToTestSettings
+    public class AssetToTestSettings
     {
         public string Symbol { get; set; }
         public BarChartIntervalConfig BarChartIntervalConfig { get; set; }

@@ -1320,23 +1320,23 @@ namespace CryptoTradeBot.Simulation.Workers
                 .WithSettings(new StrategyRunnerSettings()
                 {
                     StrategyName = "CustomNestedBarBreakthrough",
-                    AssetsToTest = new List<AssetsToTestSettings>()
+                    AssetsToTest = new List<AssetToTestSettings>()
                     {
-                        new AssetsToTestSettings()
+                        new AssetToTestSettings()
                         {
                             Symbol = "BTCUSDT",
                             From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(3 * 30)),
                             To = DateTime.UtcNow,
                             BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
                         },
-                        //new AssetsToTestSettings()
+                        //new AssetToTestSettings()
                         //{
                         //    Symbol = "IOTAUSDT",
                         //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),
                         //    To = DateTime.UtcNow,
                         //    BarChartIntervalConfig = BinanceConfig.GetBarChartInterval("4h"),
                         //},
-                        //new AssetsToTestSettings()
+                        //new AssetToTestSettings()
                         //{
                         //    Symbol = "DASHUSDT",
                         //    From = DateTime.UtcNow.Subtract(TimeSpan.FromDays(12 * 30)),

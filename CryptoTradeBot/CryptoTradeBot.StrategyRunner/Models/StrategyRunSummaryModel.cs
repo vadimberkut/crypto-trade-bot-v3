@@ -14,21 +14,21 @@ namespace CryptoTradeBot.StrategyRunner.Models
         public StrategyRunSummaryModel(
             StrategyRunnerSettings strategyRunnerSettings,
             StrategyDefinitionModel strategyDefinition,
-            AssetsToTestSettings assetsToTestSettings,
+            AssetToTestSettings assetsToTestSettings,
             List<SimpleTradeResultModel> results,
             int barsCount
         )
         {
             StrategyRunnerSettings = strategyRunnerSettings;
             StrategyDefinition = strategyDefinition;
-            AssetsToTestSettings = assetsToTestSettings;
+            AssetToTestSettings = assetsToTestSettings;
             Results = results ?? new List<SimpleTradeResultModel>();
             BarsCount = barsCount;
         }
 
         public StrategyRunnerSettings StrategyRunnerSettings { get; private set; }
         public StrategyDefinitionModel StrategyDefinition { get; private set; }
-        public AssetsToTestSettings AssetsToTestSettings { get; private set; }
+        public AssetToTestSettings AssetToTestSettings { get; private set; }
         public List<SimpleTradeResultModel> Results { get; private set; }
         public int BarsCount { get; private set; }
 
@@ -118,9 +118,9 @@ namespace CryptoTradeBot.StrategyRunner.Models
             logger.LogInformation("");
             logger.LogInformation("Strategy run summary:");
             logger.LogInformation($"Strategy={StrategyRunnerSettings.StrategyName}");
-            logger.LogInformation($"Symbol={AssetsToTestSettings.Symbol}");
-            logger.LogInformation($"BarInterval={AssetsToTestSettings.BarChartIntervalConfig.Name}");
-            logger.LogInformation($"Range: From={AssetsToTestSettings.From.ToUtcString()}, To={AssetsToTestSettings.To.ToUtcString()}; Timespan={AssetsToTestSettings.To.Subtract(AssetsToTestSettings.From).ToString()}");
+            logger.LogInformation($"Symbol={AssetToTestSettings.Symbol}");
+            logger.LogInformation($"BarInterval={AssetToTestSettings.BarChartIntervalConfig.Name}");
+            logger.LogInformation($"Range: From={AssetToTestSettings.From.ToUtcString()}, To={AssetToTestSettings.To.ToUtcString()}; Timespan={AssetToTestSettings.To.Subtract(AssetToTestSettings.From).ToString()}");
             logger.LogInformation($"BarsCount={BarsCount}");
             logger.LogInformation($"TradesCount={TradesCount}");
             logger.LogInformation($"ProfitTradesCount={ProfitTradesCount} ({ProfitTradesPercent}%)");
