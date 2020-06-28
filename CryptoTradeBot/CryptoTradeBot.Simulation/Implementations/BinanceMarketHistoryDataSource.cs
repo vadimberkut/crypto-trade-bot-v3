@@ -68,7 +68,6 @@ namespace CryptoTradeBot.Simulation.Implementations
             {
                 _logger.LogInformation($"Loading through API...");
 
-                // TODO: split from-to on intervals according to limit and BarkInterval
                 var dto = await binanceHttpClient.GetCandlestickDataAsync(symbol, barInterval, from, to, 1000);
                 symbolBarkHistory = new GeneralSymbolBarHistoryModel()
                 {

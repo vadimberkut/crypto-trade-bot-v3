@@ -247,7 +247,6 @@ namespace CryptoTradeBot.Simulation.Workers
             {
                 _logger.LogInformation($"Loading through API...");
 
-                // TODO: split from-to on intervals according to limit and CandlestickInterval
                 var dto = await binanceHttpClient.GetCandlestickDataAsync(symbol, candlestickInterval, from, to, 1000);
                 symbolCandlestickHistory = new GeneralSymbolBarHistoryModel()
                 {
@@ -580,7 +579,6 @@ namespace CryptoTradeBot.Simulation.Workers
                         // detect and define position open condition 
                         if (false && checkBuy1StrikingBar(prevCandle, currentCandle))
                         {
-                            // TODO - make min step from open price
                             longPositionOpenPrice = currentCandle.HighPrice;
                             // longPositionStoplossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
                             longPositionStoplossPrice = currentCandle.LowPrice - currentCandle.LowPrice * 0.01m; // adaptive stoploss
@@ -595,7 +593,6 @@ namespace CryptoTradeBot.Simulation.Workers
                         }
                         else if(checkBuy2StrikingBar(prevCandle, currentCandle))
                         {
-                            // TODO - make min step from open price
                             longPositionOpenPrice = currentCandle.HighPrice;
                             //  longPositionStoplossPrice = stopLossPercent == null ? default(decimal?) : longPositionOpenPrice - longPositionOpenPrice * stopLossPercent.Value;
                             longPositionStoplossPrice = currentCandle.LowPrice - currentCandle.LowPrice * 0.01m; // adaptive stoploss
