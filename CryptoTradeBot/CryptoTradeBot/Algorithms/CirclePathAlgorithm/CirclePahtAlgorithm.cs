@@ -15,6 +15,9 @@ using System.Threading.Tasks;
 
 namespace CryptoTradeBot.Host.Algorithms.CirclePathAlgorithm
 {
+    /// <summary>
+    /// This is actually what's called Triangular arbitrage
+    /// </summary>
     public class CirclePahtAlgorithm
     {
         private readonly ILogger<CirclePahtAlgorithm> _logger;
